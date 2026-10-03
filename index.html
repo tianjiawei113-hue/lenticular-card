@@ -16,6 +16,7 @@
         box-shadow:0 26px 60px rgba(0,0,0,.7),0 0 0 1px rgba(140,170,255,.16) inset;will-change:transform;background:#0a0d15}
   .wrap.drag{cursor:grabbing}
   canvas{display:block}
+  #rcv{position:absolute;inset:0;display:none}      /* raindrop-fx 的 WebGL 层，盖在 2D 层上 */
   .ridge{position:absolute;inset:0;pointer-events:none;opacity:.15;mix-blend-mode:overlay;
          background:repeating-linear-gradient(90deg,rgba(255,255,255,.5) 0 1px,rgba(0,0,0,.5) 1px 2px)}
   .sheen{position:absolute;inset:-15% 0;pointer-events:none;mix-blend-mode:screen;filter:blur(2px);
@@ -49,7 +50,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v18 · 雨滴：湿玻璃底 + 珠内广角小镜</em></h1>
+<h1>变 画 卡 工 坊 <em>v19 · 雨滴改用 raindrop-fx 引擎</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -59,6 +60,7 @@
 
 <div class="stage"><div class="wrap" id="wrap">
   <canvas id="cv"></canvas>
+  <canvas id="rcv"></canvas>
   <div class="drop" id="drop"><b>把两张图拖进来</b><span>或点上面的按钮选图 · 图片只在本地处理，不会上传</span></div>
   <div class="ridge"></div><div class="sheen" id="sheen"></div>
   <div class="fresnel" id="fresnel"></div><div class="vig"></div>
@@ -142,6 +144,7 @@
 「透镜摆动」＝按真实光栅模拟：每根透镜里另一张从一侧推进；「细抖动」＝之前的细碎混色。<br>
 要拿去印真卡时，透镜宽度得和你买的光栅 LPI 对得上（例：60 LPI、成品宽 100 mm ≈ 236 根条纹，导出宽度 ÷ 236 就是每根透镜的像素数）。</div>
 
+<script src="vendor/raindrop-fx.bundle.js"></script>
 <script>
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const wrap=document.getElementById('wrap'), sheen=document.getElementById('sheen'), drop=document.getElementById('drop');
@@ -187,6 +190,8 @@ function fit(){
   dispW=Math.max(200,Math.round(outW*sc));
   dispH=Math.max(200,Math.round(outH*sc));
   cv.width=dispW; cv.height=dispH; cv.style.width=dispW+'px'; cv.style.height=dispH+'px';
+  const rcvEl=document.getElementById('rcv');
+  rcvEl.style.width=dispW+'px'; rcvEl.style.height=dispH+'px';
   wrap.style.width=dispW+'px'; wrap.style.height=dispH+'px';
   updateResInfo();
   draw();
@@ -491,7 +496,10 @@ function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==
 // u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
 function renderFlow(g,W,H,u){
   const a=ratioB();
-  if(FSTYLE==='rain'){ drawRain(g,W,H,u); return; }     // 雨滴是一层透镜，和倾斜进度无关
+  if(FSTYLE==='rain'){
+    if(typeof RaindropFX==='undefined'){ drawRain(g,W,H,u); return; }   // 引擎没加载 → 用内置简化版兜底
+    rfxTick(a, dispW, dispH); return;                                    // 正常情况交给 raindrop-fx（WebGL 层）
+  }
   const rA=srcRect(imgA), rB=srcRect(imgB);
   g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
   if(a<=0.002) return;
@@ -571,10 +579,56 @@ function flowPhase(){
   if(FFL<=0) return 0;
   return ((performance.now()-flowT0)/1000*(FFL/100)/6)%1;   // 流速 100 → 6 秒一圈
 }
+// ===== 雨滴模式 = 一层真的湿玻璃：整套用 raindrop-fx（MIT © SardineFish，见 vendor/）=====
+// 它自己管水珠的生成/合并/拖尾/折射/雾气，我们只负责：给它一块画布、喂它「背后那张图」、
+// 并在倾斜过半时把背后的图换成另一张 —— 水珠里的折射会自动跟着变。
+const rcv=document.getElementById('rcv');
+let rfx=null, rfxScene='', rfxSize='', rfxPending=false, rfxRunning=false, sceneCv=null, rfxTried=false;
+function errShow(msg){ const el=document.getElementById('res'); if(el) el.innerHTML='<span class="warn">⚠ '+msg+'</span>'; }
+addEventListener('error', function(e){ errShow((e.message||'脚本出错')+' @行'+(e.lineno||'?')); });
+function sceneCanvas(which){
+  const W=Math.max(64,Math.round(outW)), H=Math.max(2,Math.round(outH));
+  sceneCv=flowCv(sceneCv,W,H);
+  const x=sceneCv.getContext('2d'), im=(which==='B')?imgB:imgA;
+  if(!im) return null;
+  const r=srcRect(im);
+  x.clearRect(0,0,W,H);
+  x.drawImage(im, r[0],r[1],r[2],r[3], 0,0,W,H);
+  return sceneCv;
+}
+async function rfxStart(W,H){
+  if(typeof RaindropFX==='undefined'){ errShow('雨滴引擎没加载（vendor/raindrop-fx.bundle.js）'); return; }
+  try{
+    if(!rfx){
+      rfx=new RaindropFX({ canvas:rcv,
+        spawnSize:[24,70], spawnInterval:[0.06,0.16], spawnLimit:800,
+        slipRate:0.55, motionInterval:[0.4,1.6], xShifting:[-0.04,0.04],
+        backgroundBlurSteps:3,
+        mist:true, mistColor:[0.88,0.93,1,0.16], mistTime:1.2, mistBlurStep:4 });
+    }
+    if(!rfxRunning){ await rfx.start(); rfxRunning=true; }
+    rfx.resize(W,H); rfxSize=W+'x'+H;
+  }catch(e){ errShow('雨滴引擎启动失败：'+((e&&e.message)||e)); }
+}
+function rfxStop(){ if(rfx && rfxRunning){ try{ rfx.stop(); }catch(e){} rfxRunning=false; } }
+function rfxTick(a,W,H){
+  if(!rfxRunning){ rfxStart(W,H); return; }
+  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch(e){} }
+  if(rfxPending || !imgA || !imgB) return;
+  const want=(a>=0.5)?'B':'A';
+  if(rfxScene===want) return;
+  const c=sceneCanvas(want); if(!c) return;
+  rfxPending=true;
+  rfx.setBackground(c).then(function(){ rfxScene=want; }, function(){ errShow('背景设置失败'); }).then(function(){ rfxPending=false; });
+}
 function draw(){
+  const rain=(MODE==='flow' && FSTYLE==='rain' && typeof RaindropFX!=='undefined');
+  cv.style.display = rain?'none':'block';
+  rcv.style.display = rain?'block':'none';
+  if(!rain) rfxStop();
   ctx.clearRect(0,0,dispW,dispH);
   if(MODE==='flow') flowU=flowPhase();
-  renderTo(ctx, dispW, dispH);
+  if(!rain) renderTo(ctx, dispW, dispH);
   const a=ratioB(), ang=t*MAX, at=Math.abs(t);
   angEl.textContent=(Math.abs(ang)<0.5?0:ang).toFixed(0)+'\u00b0';
   raEl.textContent=Math.round((1-a)*100)+'%'; rbEl.textContent=Math.round(a*100)+'%';
@@ -822,6 +876,7 @@ function quantizeFrame(data,w,h,lut,dither){
 }
 document.getElementById('gif').onclick=async function(){
   if(!imgA||!imgB){ alert('先选两张图'); return; }
+  if(MODE==='flow' && FSTYLE==='rain'){ alert('雨滴模式用的是 raindrop-fx 的 WebGL 引擎（实时渲染），GIF 抓不到它的画面。要存 GIF 请切到「水波」样式。'); return; }
   const btn=this; if(btn.disabled) return;
   const fps=Number(document.getElementById('gfps').value);
   const gw=Number(document.getElementById('gsize').value);
