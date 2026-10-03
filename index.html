@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v15 · 雨滴：光滑泪滴 + 细水痕</em></h1>
+<h1>变 画 卡 工 坊 <em>v16 · 雨滴：圆珠 + 路径拖尾</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -320,10 +320,12 @@ const DROPS=(function(){
        : kind===1 ? 0.006+rnd()*0.014
        :            0.022+rnd()*0.048,
       speed: kind===0 ? 0 : (kind===1 ? 1 : 2),
-      trail: kind===1 ? 0.9+rnd()*2.2 : (kind===2 ? 0.4+rnd()*1.3 : 0),
+      trail: kind===1 ? 4.0+rnd()*6.0 : (kind===2 ? 3.0+rnd()*4.5 : 0),   // 以珠径为单位：真实水痕会拖好几倍
       // 表面张力把水珠拉得很光滑：静止小珠几乎正圆，滑动的大珠是纵向拉长的泪滴
-      asp:   kind===0 ? 1.00+rnd()*0.10 : (kind===1 ? 1.16+rnd()*0.26 : 1.22+rnd()*0.30),
-      taper: kind===0 ? 0.04+rnd()*0.04 : (kind===1 ? 0.42+rnd()*0.10 : 0.34+rnd()*0.10),
+      // 头部就是个圆/竖椭圆；"像水珠"靠的是身后那条路径拖尾，不是靠捏外形
+      asp:   kind===0 ? 1.00+rnd()*0.07 : (kind===1 ? 1.04+rnd()*0.10 : 1.08+rnd()*0.14),
+      amp:   (kind===0 ? 0.0015 : 0.010+rnd()*0.012),      // 路径左右摆动的幅度
+      wob:   rnd(),                                         // 摆动相位
       ph: rnd()                             // 涨落相位（雨有疏密）
     });
   }
@@ -331,20 +333,11 @@ const DROPS=(function(){
 })();
 const CIRC=(function(){ const c=new Float32Array(26), s=new Float32Array(26);
   for(let i=0;i<26;i++){ const a=i/26*Math.PI*2; c[i]=Math.cos(a); s[i]=Math.sin(a); } return [c,s]; })();
-// 光滑的泪滴轮廓：下半是圆，上半平滑收窄（taper 越大越尖）。没有随机起伏——
-// 真实水珠是表面张力拉出来的，不该是坑坑洼洼的水团。
-function dropPath(g,x,y,r,asp,taper){
-  g.beginPath();
-  for(let i=0;i<=NARC;i++){
-    const th=i/NARC*Math.PI*2;
-    const up=Math.max(0,-Math.sin(th));            // 上半（画布里 y 向下，故 -sin 为上）
-    // 收窄只作用在横向：这样顶部又高又尖（真实滑动水珠），而不是被压矮
-    const px=x+Math.cos(th)*r*(1-taper*up*up), py=y+Math.sin(th)*r*asp;
-    if(i===0) g.moveTo(px,py); else g.lineTo(px,py);
-  }
-  g.closePath();
+// 水珠的路径（解析式，保证整圈可无缝循环）：竖直下滑 + 轻微左右摆
+function dropPos(d,u,W,H){
+  return [ d.x*W + Math.sin(TWO_PI*(u*2+d.wob))*d.amp*W,
+           ((d.y+u*d.speed)%1)*H ];
 }
-const NARC=28;
 // 镜面高光：一块软斑（不是一个圆环，所以不会显得"太圆"）
 const SPEC=(function(){
   const S=64,c=document.createElement('canvas'); c.width=S; c.height=S;
@@ -442,14 +435,29 @@ function drawRain(g,W,H,u){
   const kn=collectDrops(W,H,u,rainKept);
   for(let i=0;i<kn;i++){
     const it=rainKept[i], d=it.d, r=it.r;
-    if(it.tr>0) drawStreak(g,src,it.x,it.y-r*0.12,it.y-it.tr-it.r*0.35,r,K);
+    // 拖尾 = 它刚走过的路径：往回取样若干点，画成一串越来越细、越来越淡的线段
+    // （照 DarkLight9y/rain 那份物理模拟的做法——头是圆珠，像不像水珠全靠这条尾）
+    if(it.tr>0 && d.speed>0){
+      const SEG=12, du=it.tr/(d.speed*H)/SEG;
+      let px=it.x, py=it.y;
+      for(let s=1;s<=SEG;s++){
+        const p=dropPos(d,u-du*s,W,H);
+        if(p[1]>py) break;                                  // 跨过上/下边界就断开，别拉一条直线
+        const f=1-s/SEG;
+        g.beginPath(); g.moveTo(px,py); g.lineTo(p[0],p[1]);
+        g.lineWidth=Math.max(0.5,r*1.15*f);                  // 越往后越细
+        g.strokeStyle='rgba(214,236,255,'+(0.34*f*f+0.03).toFixed(3)+')';
+        g.lineCap='round';
+        g.stroke();
+        px=p[0]; py=p[1];
+      }
+    }
     g.save();
-    dropPath(g,it.x,it.y,r,d.asp,d.taper);
-    g.clip();
-    dropRefract(g,src,it.x,it.y,r*2,r*2,K,K*(0.92+0.30*Math.min(1,r/(W*0.045))));   // 珠子越大，放大越强
+    g.beginPath(); g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2); g.clip();
+    dropRefract(g,src,it.x,it.y,r*2,r*2*d.asp,K,K*(0.92+0.30*Math.min(1,r/(W*0.045))));   // 珠子越大，放大越强
     g.restore();
     g.save();
-    dropPath(g,it.x,it.y,r,d.asp,d.taper);
+    g.beginPath(); g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2);
     const lg=g.createLinearGradient(it.x-r,it.y-r,it.x+r,it.y+r);
     lg.addColorStop(0,'rgba(255,255,255,0.50)');
     lg.addColorStop(0.5,'rgba(255,255,255,0.04)');
