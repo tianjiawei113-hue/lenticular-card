@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>变画卡工坊 · 上传两张图</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(1200px 800px at 50% 0%,#1b1f2e,#0b0d14 60%,#06070b);
+       color:#cfd6e6;font:13.5px/1.6 "Microsoft YaHei",system-ui,sans-serif;
+       display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px;user-select:none}
+  h1{font-size:15px;font-weight:600;letter-spacing:.14em;color:#8fa0c0;margin:6px 0 0}
+  h1 em{font-style:normal;font-size:10.5px;letter-spacing:0;color:#4d5a75;margin-left:8px}
+  .stage{perspective:1500px}
+  .wrap{position:relative;border-radius:14px;overflow:hidden;cursor:grab;touch-action:none;
+        box-shadow:0 26px 60px rgba(0,0,0,.7),0 0 0 1px rgba(140,170,255,.16) inset;will-change:transform;background:#0a0d15}
+  .wrap.drag{cursor:grabbing}
+  canvas{display:block}
+  .ridge{position:absolute;inset:0;pointer-events:none;opacity:.15;mix-blend-mode:overlay;
+         background:repeating-linear-gradient(90deg,rgba(255,255,255,.5) 0 1px,rgba(0,0,0,.5) 1px 2px)}
+  .sheen{position:absolute;inset:-15% 0;pointer-events:none;mix-blend-mode:screen;filter:blur(2px);
+         background:linear-gradient(105deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%)}
+  .fresnel{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;opacity:0;
+           background:linear-gradient(90deg,rgba(255,255,255,.92),rgba(255,255,255,0) 13%,
+                      rgba(255,255,255,0) 87%,rgba(255,255,255,.92))}
+  .vig{position:absolute;inset:0;pointer-events:none;
+       background:radial-gradient(125% 105% at 50% 45%,transparent 52%,rgba(0,0,0,.5) 100%)}
+  .drop{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+        color:#8b98b6;text-align:center;padding:20px}
+  .drop b{color:#dbe4f5;font-weight:600}
+  .row{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+  .slot{display:flex;align-items:center;gap:8px;background:#101423;border:1px dashed #2b3450;border-radius:10px;padding:8px 12px;cursor:pointer}
+  .slot img{width:34px;height:34px;object-fit:cover;border-radius:6px;background:#0a0d15}
+  .slot span{color:#8b98b6;font-size:12.5px}
+  .panel{display:flex;gap:16px;align-items:center;background:#101423;border:1px solid #202942;border-radius:11px;
+         padding:9px 15px;color:#8b98b6;font-size:12.5px;flex-wrap:wrap;justify-content:center}
+  .panel label{display:flex;gap:7px;align-items:center}
+  input[type=range]{width:120px;accent-color:#5b8cff}
+  select{background:#171c29;color:#c8d4ea;border:1px solid #2b3450;border-radius:7px;padding:4px 8px;font:inherit}
+  button{background:#171c29;color:#c8d4ea;border:1px solid #2b3450;border-radius:8px;padding:6px 13px;font:inherit;cursor:pointer}
+  button:hover{background:#1e2540;border-color:#3d4a72;color:#fff}
+  button.primary{background:#24406f;border-color:#3d6bd0}
+  .hud{display:flex;gap:16px;align-items:center;color:#7f8ba6;font-variant-numeric:tabular-nums;flex-wrap:wrap;justify-content:center}
+  .hud b{color:#dbe4f5}
+  .res{color:#7f8ba6;font-size:12px;text-align:center}
+  .res b{color:#b9c6de}
+  .warn{color:#e0a75e}
+  .tip{color:#5c6a86;font-size:12px;text-align:center;max-width:800px}
+</style>
+</head>
+<body>
+<h1>变 画 卡 工 坊 <em>v7 · 新增「溶解流动」</em></h1>
+
+<div class="row">
+  <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
+  <label class="slot"><input id="fileB" type="file" accept="image/*" hidden><img id="thumbB" alt=""><span>② 选「斜看」图</span></label>
+  <button id="swap">交换两张</button>
+</div>
+
+<div class="stage"><div class="wrap" id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="drop" id="drop"><b>把两张图拖进来</b><span>或点上面的按钮选图 · 图片只在本地处理，不会上传</span></div>
+  <div class="ridge"></div><div class="sheen" id="sheen"></div>
+  <div class="fresnel" id="fresnel"></div><div class="vig"></div>
+</div></div>
+
+<div class="res" id="res">还没选图</div>
+
+<div class="hud">
+  <span>倾斜 <b id="ang">0°</b></span>
+  <span>A <b id="ra">100%</b> : B <b id="rb">0%</b></span>
+  <button id="auto">自动晃动</button>
+  <button id="reset">回正</button>
+</div>
+
+<div class="panel">
+  <label>画面比例
+    <select id="aspect">
+      <option value="2:3" selected>2:3 竖版</option>
+      <option value="auto">跟随①图</option>
+      <option value="3:4">3:4 竖版</option>
+      <option value="1:1">1:1 方版</option>
+      <option value="16:9">16:9 横版</option>
+      <option value="9:16">9:16 手机竖屏</option>
+    </select>
+  </label>
+  <label>输出精度
+    <select id="res-sel">
+      <option value="small" selected>跟随较小图</option>
+      <option value="big">跟随较大图</option>
+      <option value="1080">长边 1080</option>
+      <option value="1536">长边 1536</option>
+      <option value="2048">长边 2048</option>
+      <option value="3072">长边 3072</option>
+    </select>
+  </label>
+  <label>过渡快慢 <input id="G" type="range" min="0.4" max="2.5" step="0.1" value="1"><b id="Gv">1.0</b></label>
+  <label>中心死区 <input id="D" type="range" min="0" max="40" step="1" value="8"><b id="Dv">8%</b></label>
+  <label>条纹粗细 <input id="S" type="range" min="1" max="4" step="1" value="1"><b id="Sv">1px</b></label>
+  <label>混合方式
+    <select id="mode">
+      <option value="lens" selected>透镜摆动</option>
+      <option value="dither">细抖动</option>
+      <option value="flow">溶解流动</option>
+    </select>
+  </label>
+  <label>透镜宽度 <input id="L" type="range" min="2" max="16" step="1" value="4"><b id="Lv">4px</b></label>
+  <label>溶解尺度 <input id="Fsc" type="range" min="1" max="14" step="0.5" value="4.5"><b id="Fscv">4.5</b></label>
+  <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="12"><b id="Fsov">12</b></label>
+  <label>流动速度 <input id="Ffl" type="range" min="0" max="100" step="1" value="35"><b id="Fflv">35</b></label>
+  <label>边缘发光 <input id="Fgl" type="range" min="0" max="70" step="1" value="24"><b id="Fglv">24</b></label>
+</div>
+
+<div class="panel">
+  <button id="png" class="primary">导出交错底图 PNG</button>
+  <button id="video" class="primary">录一段倾斜动画</button>
+  <span class="tip">底图按当前输出精度导出，可直接拿去印真光栅卡（「溶解流动」是屏幕效果，没有静态可印图案）</span>
+</div>
+
+<div class="panel">
+  <button id="gif" class="primary">存 GIF 动图</button>
+  <label>帧率 <select id="gfps">
+    <option>15</option><option selected>20</option><option>25</option><option>33</option><option>50</option>
+  </select>fps</label>
+  <label>宽 <select id="gsize">
+    <option>320</option><option selected>400</option><option>480</option><option>600</option>
+  </select>px</label>
+  <label>画质 <select id="gqual">
+    <option value="fast" selected>标准（文件小）</option>
+    <option value="fine">细腻（加抖动）</option>
+  </select></label>
+  <span class="tip">GIF 只有 256 色，比 MP4 糊一点；帧率/尺寸越大文件越大（20fps×400px 约 2–4 MB）</span>
+</div>
+
+<div class="tip">拖动卡片＝改变视角：中间是完整的一张，往左或右倾斜另一张才一点点浮出来（整张同时变）。<br>
+「透镜摆动」＝按真实光栅模拟：每根透镜里另一张从一侧推进；「细抖动」＝之前的细碎混色。<br>
+要拿去印真卡时，透镜宽度得和你买的光栅 LPI 对得上（例：60 LPI、成品宽 100 mm ≈ 236 根条纹，导出宽度 ÷ 236 就是每根透镜的像素数）。</div>
+
+<script>
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const wrap=document.getElementById('wrap'), sheen=document.getElementById('sheen'), drop=document.getElementById('drop');
+const fres=document.getElementById('fresnel');
+const angEl=document.getElementById('ang'), raEl=document.getElementById('ra'), rbEl=document.getElementById('rb'), resEl=document.getElementById('res');
+const GOLD=0.6180339887498949, MAX=26;
+let imgA=null, imgB=null;
+let t=0, GAIN=1.0, DEAD=0.08, PITCH=1, LENS=4, MODE='lens';
+let FSC=4.5, FSO=12, FFL=35, FGL=24;      // 溶解流动：尺度 / 边缘柔度 / 流速 / 边缘发光
+let outW=900, outH=1350;                 // 输出（逻辑）分辨率：与源图相关
+let dispW=900, dispH=1350;               // 屏幕显示尺寸（性能用，封顶）
+let dragging=false, sx0=0, st0=0, auto=false;
+
+function ratioOf(){
+  const mode=document.getElementById('aspect').value;
+  if(mode==='auto' && imgA) return imgA.width/imgA.height;
+  if(mode!=='auto'){ const p=mode.split(':'); return Number(p[0])/Number(p[1]); }
+  return 2/3;
+}
+function longEdge(im){ return im?Math.max(im.width,im.height):1e9; }
+function pickLongEdge(){
+  const mode=document.getElementById('res-sel').value;
+  if(!imgA && !imgB) return 1350;
+  let le=0;
+  if(mode==='small') le=Math.min(longEdge(imgA), longEdge(imgB));
+  else if(mode==='big') le=Math.max(imgA?longEdge(imgA):0, imgB?longEdge(imgB):0);
+  else le=Number(mode);
+  if(!isFinite(le)||le<64) le=1350;
+  return Math.max(256, Math.min(4096, Math.round(le)));
+}
+// 用长边换算输出尺寸：竖图长边=高，横图长边=宽
+function computeSize(){
+  const r=ratioOf(), le=pickLongEdge();
+  let h = r>=1 ? le/r : le;              // 横图：长边是宽
+  h = Math.round(h);
+  return [Math.round(h*r), h];
+}
+function fit(){
+  const s=computeSize(); outW=s[0]; outH=s[1];
+  const k=Math.min((innerWidth-60)/outW,(innerHeight-340)/outH,1.2);
+  const sc=Math.min(k,2);
+  dispW=Math.max(200,Math.round(outW*sc));
+  dispH=Math.max(200,Math.round(outH*sc));
+  cv.width=dispW; cv.height=dispH; cv.style.width=dispW+'px'; cv.style.height=dispH+'px';
+  wrap.style.width=dispW+'px'; wrap.style.height=dispH+'px';
+  updateResInfo();
+  draw();
+}
+// 每张画面在卡上实际能拿到多少像素位：横向交错后只剩 W/2 个采样点
+function needScale(img){
+  const r=srcRect(img);
+  return Math.max((outW/2)/r[2], outH/r[3]);
+}
+function updateResInfo(){
+  if(!imgA&&!imgB){ resEl.textContent='还没选图'; return; }
+  const a=imgA?imgA.width+'×'+imgA.height:'—', b=imgB?imgB.width+'×'+imgB.height:'—';
+  let warn='';
+  const need=Math.max(imgA?needScale(imgA):0, imgB?needScale(imgB):0);
+  if(need>1.03) warn=' <span class="warn">（画面会被放大 '+need.toFixed(2)+'×，可能发虚）</span>';
+  resEl.innerHTML='卡片输出分辨率 <b>'+outW+'×'+outH+'</b> ｜ 每张画面约 '+Math.round(outW/2)+'×'+outH+' 像素位 ｜ 图① '+a+' ｜ 图② '+b+warn;
+}
+function srcRect(img){
+  const ir=img.width/img.height, cr=outW/outH;
+  if(ir>cr){ const sh=img.height, sw=sh*cr; return [(img.width-sw)/2,0,sw,sh]; }
+  const sw=img.width, sh=sw/cr; return [0,(img.height-sh)/2,sw,sh];
+}
+function ratioB(){
+  const a=Math.min(1,Math.abs(t));
+  if(a<=DEAD) return 0;
+  return Math.min(1, Math.pow((a-DEAD)/(1-DEAD), GAIN));
+}
+// 每列两张图各自的权重 [wA,wB]（和为 1）
+// 透镜模式＝真实光栅：每根透镜里 A 占左边一段、B 占右边一段，随视角 a 推进，
+// 边界留 1 像素软过渡，所以是「整根透镜一起摆」而不是随机麻点。
+function colWeights(x){
+  const a=ratioB();
+  if(MODE==='dither'){
+    const p=Math.max(1,Math.round(PITCH));
+    const xq=x-(x%p);                       // 量化到 pitch 网格：保证最小条纹宽度
+    return ((xq*GOLD)%1)<a ? [0,1] : [1,0];
+  }
+  const L=Math.max(2,Math.round(LENS));
+  const d=x-Math.floor(x/L)*L;              // 透镜内位置
+  const b=(1-a)*L-0.5;                      // A 区宽度：视角越大 A 越少（两端要能到纯 A / 纯 B）
+  const beta=Math.max(0,Math.min(1,d-b+0.5)); // 0=纯 A，1=纯 B
+  return [1-beta,beta];
+}
+function sameW(p,q){ return p[0]===q[0] && p[1]===q[1]; }
+// 把当前视角的图案画到任意 ctx（预览与导出共用同一套图案）
+function renderTo(g, W, H){
+  if(!imgA){ return; }
+  if(!imgB){ g.drawImage(imgA,0,0,imgA.width,imgA.height,0,0,W,H); return; }
+  if(MODE==='flow'){ renderFlow(g,W,H,flowU); return; }
+  const rA=srcRect(imgA), rB=srcRect(imgB);
+  const sx=rA[2]/W, sy=rB[2]/W;
+  let x=0;
+  while(x<W){
+    const w=colWeights(x);
+    let x2=x+1;
+    while(x2<W && sameW(w,colWeights(x2))) x2++;
+    const dw=x2-x;
+    if(w[1]<=0){
+      g.drawImage(imgA, rA[0]+rA[2]*(x/W), rA[1], Math.max(0.001,sx*dw), rA[3], x, 0, dw, H);
+    }else if(w[0]<=0){
+      g.drawImage(imgB, rB[0]+rB[2]*(x/W), rB[1], Math.max(0.001,sy*dw), rB[3], x, 0, dw, H);
+    }else{
+      g.globalAlpha=w[0];
+      g.drawImage(imgA, rA[0]+rA[2]*(x/W), rA[1], Math.max(0.001,sx*dw), rA[3], x, 0, dw, H);
+      g.globalAlpha=w[1];
+      g.drawImage(imgB, rB[0]+rB[2]*(x/W), rB[1], Math.max(0.001,sy*dw), rB[3], x, 0, dw, H);
+      g.globalAlpha=1;
+    }
+    x=x2;
+  }
+}
+// ===== 「溶解流动」引擎：噪声阈值溶解 + 随角度流动 + 边界发光 =====
+function smoothstep(e0,e1,x){ const u=Math.max(0,Math.min(1,(x-e0)/(e1-e0))); return u*u*(3-2*u); }
+function fract01(x){ return x-Math.floor(x); }
+const NT=256;                                  // 噪声贴图边长（只生成一次）
+const NOISE=(function(){
+  const t=new Float32Array(NT*NT);
+  const hash=(i,j)=>{ let n=(i*374761393+j*668265263)|0; n=(n^(n>>>13))*1274126177|0; return ((n^(n>>>16))>>>0)/4294967296; };
+  const vn=(x,y)=>{
+    const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
+    const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+    const a=hash(xi,yi), b=hash(xi+1,yi), c=hash(xi,yi+1), d=hash(xi+1,yi+1);
+    return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
+  };
+  for(let y=0;y<NT;y++) for(let x=0;x<NT;x++){
+    const fx=x/NT*6, fy=y/NT*6;
+    t[y*NT+x]=vn(fx,fy)*0.55+vn(fx*2.1+13.7,fy*2.1+7.3)*0.3+vn(fx*4.3+31.1,fy*4.3+19.7)*0.15;
+  }
+  let mn=1e9,mx=-1e9;
+  for(let i=0;i<t.length;i++){ if(t[i]<mn)mn=t[i]; if(t[i]>mx)mx=t[i]; }
+  const u8=new Uint8Array(t.length);
+  for(let i=0;i<t.length;i++) u8[i]=Math.round((t[i]-mn)/(mx-mn)*255);
+  // 直方图均衡：让噪声取值均匀分布，这样「露出 B 的面积」正好等于过渡进度 a
+  const hist=new Uint32Array(256), cdf=new Uint32Array(256);
+  for(let i=0;i<u8.length;i++) hist[u8[i]]++;
+  let acc=0;
+  for(let i=0;i<256;i++){ acc+=hist[i]; cdf[i]=acc; }
+  const lut=new Uint8Array(256);
+  for(let i=0;i<256;i++) lut[i]=Math.round(cdf[i]/u8.length*255);
+  for(let i=0;i<u8.length;i++) u8[i]=lut[u8[i]];
+  return u8;
+})();
+function nz(u,v){                              // 双线性采样 + 环绕
+  const x=u*NT, y=v*NT;
+  // 先加 2^19（是 256 的整数倍，不影响环绕结果）把坐标抬成正数，这样 |0 就等价于 floor
+  const BIAS=524288;
+  const xi=((x+BIAS)|0)-BIAS, yi=((y+BIAS)|0)-BIAS, xf=x-xi, yf=y-yi;
+  const x0=xi&255, y0=yi&255, x1=(x0+1)&255, y1=(y0+1)&255;   // 256 是 2 的幂，按位与即环绕
+  const r0=y0<<8, r1=y1<<8;
+  const a=NOISE[r0+x0], b=NOISE[r0+x1], c=NOISE[r1+x0], d=NOISE[r1+x1];
+  return ((a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf)*0.00392156862745098;
+}
+let flowFill=null, flowGlow=null, flowLayer=null, rowSh=null;
+function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } return c; }
+// u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
+function renderFlow(g,W,H,u){
+  const a=ratioB();
+  const rA=srcRect(imgA), rB=srcRect(imgB);
+  g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
+  if(a<=0.002) return;
+  const mw=Math.max(24,Math.min(200,Math.round(W/3))), mh=Math.max(2,Math.round(mw*H/W));
+  flowFill=flowCv(flowFill,mw,mh); flowGlow=flowCv(flowGlow,mw,mh); flowLayer=flowCv(flowLayer,mw,mh);
+  if(!rowSh || rowSh.length<mh) rowSh=new Float32Array(mh);
+  const fctx=flowFill.getContext('2d'), gctx=flowGlow.getContext('2d');
+  const fi=fctx.createImageData(mw,mh), gi=gctx.createImageData(mw,mh);
+  const thr=1-a;                                // 阈值：a 越大，露出 B 的面积越大
+  const soft=Math.max(0.004, FSO/400);          // 边缘柔度（噪声域）
+  const cells=3+FSC*0.8;                        // 一屏的噪声格子数
+  const ang=u*Math.PI*2;
+  const dx0=Math.sin(ang)*0.9 + t*0.85;         // 环流 + 跟着倾斜方向走
+  const dy0=Math.cos(ang)*0.45;
+  const ph2=ang*2;
+  for(let y=0;y<mh;y++) rowSh[y]=Math.sin((y/mw)*cells*0.7+ph2)*0.55;   // 逐行错位，看着像在流
+  const F=fi.data, G=gi.data;
+  const kx=cells/6/mw;                          // 像素 → 噪声贴图单位
+  let p=0;
+  for(let y=0;y<mh;y++){
+    const ny=(y*kx)+dy0;
+    for(let x=0;x<mw;x++,p+=4){
+      const v=nz(x*kx+dx0+rowSh[y], ny);
+      const d=Math.max(0,Math.min(1,(v-thr+soft)/(2*soft)));   // 归一化后再缓动，负半轴才对
+      const m=d*d*(3-2*d);
+      const e=4*m*(1-m);
+      F[p]=255; F[p+1]=255; F[p+2]=255; F[p+3]=m*255;
+      G[p]=255; G[p+1]=255; G[p+2]=255; G[p+3]=e*255;
+    }
+  }
+  fctx.putImageData(fi,0,0);
+  gctx.putImageData(gi,0,0);
+  const ictx=flowLayer.getContext('2d');
+  ictx.globalCompositeOperation='source-over';
+  ictx.clearRect(0,0,mw,mh);
+  ictx.drawImage(imgB, rB[0],rB[1],rB[2],rB[3], 0,0,mw,mh);
+  ictx.globalCompositeOperation='destination-in';
+  ictx.drawImage(flowFill,0,0);
+  ictx.globalCompositeOperation='source-over';
+  g.globalAlpha=1;
+  g.drawImage(flowLayer,0,0,W,H);
+  if(FGL>0){
+    g.globalCompositeOperation='screen';
+    g.globalAlpha=FGL/100*0.5;
+    g.drawImage(flowGlow,0,0,W,H);
+    g.globalAlpha=1;
+    g.globalCompositeOperation='source-over';
+  }
+}
+let flowU=0, flowT0=performance.now();
+function flowPhase(){
+  if(FFL<=0) return 0;
+  return ((performance.now()-flowT0)/1000*(FFL/100)/6)%1;   // 流速 100 → 6 秒一圈
+}
+function draw(){
+  ctx.clearRect(0,0,dispW,dispH);
+  if(MODE==='flow') flowU=flowPhase();
+  renderTo(ctx, dispW, dispH);
+  const a=ratioB(), ang=t*MAX, at=Math.abs(t);
+  angEl.textContent=(Math.abs(ang)<0.5?0:ang).toFixed(0)+'\u00b0';
+  raEl.textContent=Math.round((1-a)*100)+'%'; rbEl.textContent=Math.round(a*100)+'%';
+  wrap.style.transform='rotateY('+(-ang).toFixed(2)+'deg)';
+  sheen.style.transform='translateX('+(t*46).toFixed(1)+'%)';
+  fres.style.opacity=(0.62*Math.pow(at,1.25)).toFixed(3);   // 掠射角越强，边缘反光越亮
+}
+function setT(v){ t=Math.max(-1,Math.min(1,v)); draw(); }
+function loadFile(file, which){
+  if(!file || !/^image\//.test(file.type)) return;
+  const im=new Image();
+  im.onload=()=>{
+    if(which==='A'){ imgA=im; document.getElementById('thumbA').src=im.src; }
+    else { imgB=im; document.getElementById('thumbB').src=im.src; }
+    drop.style.display=(imgA&&imgB)?'none':'flex';
+    fit();
+  };
+  im.src=URL.createObjectURL(file);
+}
+document.getElementById('fileA').onchange=function(e){ loadFile(e.target.files[0],'A'); };
+document.getElementById('fileB').onchange=function(e){ loadFile(e.target.files[0],'B'); };
+wrap.addEventListener('dragover', function(e){ e.preventDefault(); });
+wrap.addEventListener('drop', function(e){
+  e.preventDefault();
+  const fs=Array.prototype.slice.call(e.dataTransfer.files).filter(function(f){ return /^image\//.test(f.type); });
+  if(fs[0]) loadFile(fs[0],'A');
+  if(fs[1]) loadFile(fs[1],'B');
+});
+document.getElementById('swap').onclick=function(){
+  const a=imgA; imgA=imgB; imgB=a;
+  document.getElementById('thumbA').src=imgA?imgA.src:'';
+  document.getElementById('thumbB').src=imgB?imgB.src:'';
+  drop.style.display=(imgA&&imgB)?'none':'flex'; fit();
+};
+wrap.addEventListener('pointerdown',function(e){ dragging=true; auto=false; wrap.classList.add('drag'); sx0=e.clientX; st0=t;
+  if(wrap.setPointerCapture) wrap.setPointerCapture(e.pointerId); });
+wrap.addEventListener('pointermove',function(e){ if(dragging){ if(e.preventDefault) e.preventDefault(); setT(st0+(e.clientX-sx0)/260); } });
+addEventListener('pointerup',function(){ dragging=false; wrap.classList.remove('drag'); });
+addEventListener('pointercancel',function(){ dragging=false; wrap.classList.remove('drag'); });
+addEventListener('keydown',function(e){ if(e.key==='ArrowLeft'){auto=false;setT(t-0.05);} if(e.key==='ArrowRight'){auto=false;setT(t+0.05);} if(e.key==='r'||e.key==='R')setT(0); });
+addEventListener('resize',fit);
+document.getElementById('reset').onclick=function(){ auto=false; setT(0); };
+document.getElementById('auto').onclick=function(){ auto=!auto; };
+document.getElementById('aspect').onchange=fit;
+document.getElementById('res-sel').onchange=fit;
+document.getElementById('G').oninput=function(){ GAIN=Number(this.value); document.getElementById('Gv').textContent=GAIN.toFixed(1); draw(); };
+document.getElementById('D').oninput=function(){ DEAD=Number(this.value)/100; document.getElementById('Dv').textContent=this.value+'%'; draw(); };
+document.getElementById('S').oninput=function(){ PITCH=Number(this.value); document.getElementById('Sv').textContent=this.value+'px'; draw(); };
+function syncMode(){
+  const lens=(MODE==='lens');
+  const s=document.getElementById('S'), l=document.getElementById('L');
+  s.disabled=lens; s.parentNode.style.opacity=lens?0.4:1;
+  l.disabled=!lens; l.parentNode.style.opacity=lens?1:0.4;
+  const flow=(MODE==='flow');
+  ['Fsc','Fso','Ffl','Fgl'].forEach(function(id){
+    const el=document.getElementById(id);
+    el.disabled=!flow; el.parentNode.style.opacity=flow?1:0.45;
+  });
+}
+document.getElementById('mode').onchange=function(){ MODE=this.value; syncMode(); draw(); };
+document.getElementById('L').oninput=function(){ LENS=Number(this.value); document.getElementById('Lv').textContent=this.value+'px'; draw(); };
+document.getElementById('Fsc').oninput=function(){ FSC=Number(this.value); document.getElementById('Fscv').textContent=this.value; draw(); };
+document.getElementById('Fso').oninput=function(){ FSO=Number(this.value); document.getElementById('Fsov').textContent=this.value; draw(); };
+document.getElementById('Ffl').oninput=function(){ FFL=Number(this.value); document.getElementById('Fflv').textContent=this.value; draw(); };
+document.getElementById('Fgl').oninput=function(){ FGL=Number(this.value); document.getElementById('Fglv').textContent=this.value; draw(); };
+
+// 导出：按当前输出精度出底图，图案与预览完全一致（可印真卡）
+document.getElementById('png').onclick=function(){
+  if(!imgA||!imgB){ alert('先选两张图'); return; }
+  if(MODE==='flow'){ alert('「溶解流动」是屏幕效果，没有静态可印的交错图案；要印真卡请切回「透镜摆动」或「细抖动」'); return; }
+  const W=outW, H=outH;
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  const g=c.getContext('2d');
+  renderTo(g,W,H);
+  const tag=(MODE==='lens'?'透镜'+Math.round(LENS)+'px':'抖动'+Math.round(PITCH)+'px');
+  const a=document.createElement('a');
+  a.download='变画卡_底图_'+tag+'_'+W+'x'+H+'.png'; a.href=c.toDataURL('image/png'); a.click();
+};
+
+document.getElementById('video').onclick=function(){
+  if(!imgA||!imgB){ alert('先选两张图'); return; }
+  const btn=this;
+  if(!window.MediaRecorder){ alert('这个浏览器不支持录制，请用 Chrome'); return; }
+  const types=['video/mp4;codecs=avc1','video/webm;codecs=vp9','video/webm'];
+  let type=null;
+  for(let i=0;i<types.length;i++){ if(MediaRecorder.isTypeSupported(types[i])){ type=types[i]; break; } }
+  if(!type){ alert('这个浏览器不支持录制，请用 Chrome'); return; }
+  const stream=cv.captureStream(30);
+  const rec=new MediaRecorder(stream,{mimeType:type,videoBitsPerSecond:8000000});
+  const chunks=[]; rec.ondataavailable=function(e){ chunks.push(e.data); };
+  btn.disabled=true; btn.textContent='录制中…';
+  rec.start();
+  const t0=performance.now(), dur=4200;
+  function step(now){
+    const p=Math.min(1,(now-t0)/dur);
+    setT(Math.sin(p*Math.PI*2));
+    if(p<1) requestAnimationFrame(step);
+    else {
+      setT(0); rec.stop();
+      rec.onstop=function(){
+        const blob=new Blob(chunks,{type:type});
+        const a=document.createElement('a');
+        a.download='变画卡_倾斜演示_'+dispW+'x'+dispH+'.'+(type.indexOf('mp4')>=0?'mp4':'webm');
+        a.href=URL.createObjectURL(blob); a.click();
+        btn.disabled=false; btn.textContent='录一段倾斜动画';
+      };
+    }
+  }
+  requestAnimationFrame(step);
+};
+
+// ===== GIF 动图导出（自带 GIF89a 编码器，无外部依赖）=====
+// LZW：先写码、再按插入前的 next 判断加宽码位，这样才和解码器同步
+function lzwEncode(minCodeSize, pixels){
+  const CLEAR=1<<minCodeSize, EOI=CLEAR+1;
+  let codeSize=minCodeSize+1, next=EOI+1;
+  let dict=new Map();
+  const out=[]; let cur=0, nbits=0;
+  const emit=(code)=>{
+    cur |= code << nbits; nbits += codeSize;
+    while(nbits>=8){ out.push(cur & 255); cur >>>= 8; nbits -= 8; }
+    if(next >= (1<<codeSize) && codeSize<12) codeSize++;
+  };
+  emit(CLEAR);
+  let prefix=pixels[0];
+  for(let i=1;i<pixels.length;i++){
+    const k=pixels[i], key=(prefix<<8)|k;
+    const v=dict.get(key);
+    if(v!==undefined){ prefix=v; continue; }
+    emit(prefix);
+    if(next<4096){ dict.set(key,next++); }
+    else { emit(CLEAR); dict=new Map(); next=EOI+1; codeSize=minCodeSize+1; }
+    prefix=k;
+  }
+  emit(prefix); emit(EOI);
+  if(nbits>0) out.push(cur & 255);
+  return out;
+}
+function gifBuild(w,h,palette,frames,delayCs){
+  const out=[];
+  const b=(v)=>out.push(v&255), s=(v)=>{ out.push(v&255,(v>>8)&255); };
+  for(const ch of 'GIF89a') b(ch.charCodeAt(0));
+  s(w); s(h); b(0xF7); b(0); b(0);
+  for(let i=0;i<768;i++) b(palette[i]);
+  b(0x21); b(0xFF); b(11);
+  for(const ch of 'NETSCAPE2.0') b(ch.charCodeAt(0));
+  b(3); b(1); s(0); b(0);
+  for(const f of frames){
+    b(0x21); b(0xF9); b(4); b(0x04); s(delayCs); b(0); b(0);
+    b(0x2C); s(0); s(0); s(w); s(h); b(0);
+    b(8);
+    const data=lzwEncode(8,f);
+    for(let i=0;i<data.length;i+=255){
+      const chunk=data.slice(i,i+255);
+      b(chunk.length);
+      for(const v of chunk) b(v);
+    }
+    b(0);
+  }
+  b(0x3B);
+  return new Uint8Array(out);
+}
+// 中位切分取 256 色：从两张图里采样（同一次生成只算一次）
+function boxStats(pts){
+  let rmin=255,rmax=0,gmin=255,gmax=0,bmin=255,bmax=0;
+  for(const p of pts){
+    if(p[0]<rmin)rmin=p[0]; if(p[0]>rmax)rmax=p[0];
+    if(p[1]<gmin)gmin=p[1]; if(p[1]>gmax)gmax=p[1];
+    if(p[2]<bmin)bmin=p[2]; if(p[2]>bmax)bmax=p[2];
+  }
+  const dr=rmax-rmin, dg=gmax-gmin, db=bmax-bmin;
+  const ch=(dr>=dg&&dr>=db)?0:(dg>=db?1:2);
+  return {range:Math.max(dr,dg,db), ch};
+}
+function buildPalette(W,H){
+  const c=document.createElement('canvas');
+  c.width=160; c.height=Math.max(2,Math.round(160*H/W));
+  const g=c.getContext('2d',{willReadFrequently:true});
+  let pts=[];
+  for(const im of [imgA,imgB]){
+    if(!im) continue;
+    const r=srcRect(im);
+    g.clearRect(0,0,c.width,c.height);
+    g.drawImage(im, r[0],r[1],r[2],r[3], 0,0,c.width,c.height);
+    const d=g.getImageData(0,0,c.width,c.height).data;
+    for(let i=0;i<d.length;i+=4) pts.push([d[i],d[i+1],d[i+2]]);
+  }
+  if(pts.length>40000){ const st=Math.ceil(pts.length/40000), q=[]; for(let i=0;i<pts.length;i+=st) q.push(pts[i]); pts=q; }
+  let boxes=[pts];
+  while(boxes.length<256){
+    let bi=-1, best=-1;
+    for(let i=0;i<boxes.length;i++){
+      const b=boxes[i]; if(b.length<2) continue;
+      const sc=boxStats(b).range*Math.log2(1+b.length);
+      if(sc>best){ best=sc; bi=i; }
+    }
+    if(bi<0) break;
+    const b=boxes[bi], st=boxStats(b);
+    b.sort((p,q)=>p[st.ch]-q[st.ch]);
+    const mid=b.length>>1;
+    boxes.splice(bi,1,b.slice(0,mid),b.slice(mid));
+  }
+  const pal=new Uint8Array(768);
+  for(let i=0;i<boxes.length && i<256;i++){
+    const b=boxes[i], n=b.length||1;
+    let r=0,g2=0,bl=0;
+    for(const p of b){ r+=p[0]; g2+=p[1]; bl+=p[2]; }
+    pal[i*3]=Math.round(r/n); pal[i*3+1]=Math.round(g2/n); pal[i*3+2]=Math.round(bl/n);
+  }
+  return pal;
+}
+// 5 位/通道的查表 + 感知加权距离，逐像素映射就变成一次数组取值
+function buildLUT(pal){
+  const lut=new Uint8Array(32768);
+  for(let r=0;r<32;r++) for(let g=0;g<32;g++) for(let b=0;b<32;b++){
+    const R=r*8+4, G=g*8+4, B=b*8+4;
+    let best=1e18, bi=0;
+    for(let i=0;i<256;i++){
+      const dr=R-pal[i*3], dg=G-pal[i*3+1], db=B-pal[i*3+2];
+      const d=2*dr*dr+4*dg*dg+3*db*db;
+      if(d<best){ best=d; bi=i; if(d===0) break; }
+    }
+    lut[(r<<10)|(g<<5)|b]=bi;
+  }
+  return lut;
+}
+const BAYER=[0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+function quantizeFrame(data,w,h,lut,dither){
+  const out=new Uint8Array(w*h);
+  let p=0;
+  for(let y=0;y<h;y++){
+    const by=(y&3)<<2;
+    for(let x=0;x<w;x++,p+=4){
+      let r=data[p], g=data[p+1], b=data[p+2];
+      if(dither){
+        const d=(BAYER[by+(x&3)]-7.5)*2;
+        r+=d; g+=d; b+=d;
+        r=r<0?0:(r>255?255:r); g=g<0?0:(g>255?255:g); b=b<0?0:(b>255?255:b);
+      }
+      out[y*w+x]=lut[((r>>3)<<10)|((g>>3)<<5)|(b>>3)];
+    }
+  }
+  return out;
+}
+document.getElementById('gif').onclick=async function(){
+  if(!imgA||!imgB){ alert('先选两张图'); return; }
+  const btn=this; if(btn.disabled) return;
+  const fps=Number(document.getElementById('gfps').value);
+  const gw=Number(document.getElementById('gsize').value);
+  const fine=document.getElementById('gqual').value==='fine';
+  const gh=Math.max(2,Math.round(gw*outH/outW/2)*2);
+  const N=Math.max(10,Math.round(fps*2.6));
+  btn.disabled=true;
+  const tSave=t;
+  try{
+    btn.textContent='GIF 采色中…'; await new Promise(r=>setTimeout(r,20));
+    const pal=buildPalette(gw,gh);
+    const lut=buildLUT(pal);
+    const gc=document.createElement('canvas'); gc.width=gw; gc.height=gh;
+    const g2=gc.getContext('2d',{willReadFrequently:true});
+    const frames=[];
+    for(let i=0;i<N;i++){
+      t=Math.sin(i/N*Math.PI*2);            // 一整圈，首尾相接可无缝循环
+      flowU=i/N;                            // 流动也走满一整圈，GIF 循环更顺
+      g2.clearRect(0,0,gw,gh);
+      renderTo(g2,gw,gh);
+      frames.push(quantizeFrame(g2.getImageData(0,0,gw,gh).data,gw,gh,lut,fine));
+      if((i&3)===0){ btn.textContent='GIF 生成中 '+Math.round(i*100/N)+'%'; await new Promise(r=>setTimeout(r,0)); }
+    }
+    btn.textContent='GIF 打包中…'; await new Promise(r=>setTimeout(r,30));
+    const gif=gifBuild(gw,gh,pal,frames,Math.round(100/fps));
+    const blob=new Blob([gif],{type:'image/gif'});
+    const a=document.createElement('a');
+    a.download='变画卡_GIF_'+gw+'x'+gh+'_'+fps+'fps.gif';
+    a.href=URL.createObjectURL(blob); a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    btn.textContent='已存 GIF '+(gif.length/1048576).toFixed(1)+'MB';
+    setTimeout(()=>{ btn.disabled=false; btn.textContent='存 GIF 动图'; },2600);
+  }catch(err){
+    alert('GIF 生成失败：'+err.message);
+    btn.disabled=false; btn.textContent='存 GIF 动图';
+  }
+  t=tSave; draw();
+};
+
+fit();
+syncMode();
+let lastFlowFrame=0;
+(function tick(now){
+  if(auto) setT(Math.sin(now/1400));
+  else if(MODE==='flow' && !dragging && FFL>0 && now-lastFlowFrame>40){ lastFlowFrame=now; draw(); }
+  requestAnimationFrame(tick);
+})(performance.now());
+</script>
+</body>
+</html>
