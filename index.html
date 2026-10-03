@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v11 · 雨滴改为折射水珠</em></h1>
+<h1>变 画 卡 工 坊 <em>v12 · 雨滴：合并 + 水痕</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -323,16 +323,44 @@ const DROPS=(function(){
   return arr;
 })();
 const DROP_GROW=(g01)=>0.5+2.6*Math.pow(g01,1.4);      // 水珠随进度长大（0.5 → 3.1 倍）
+// 收集当前可见水珠并做合并：大的先占位，被大珠包住的小珠并进去（面积守恒 → 大珠会鼓起来）。
+// 烘焙覆盖率曲线和实际绘制都走这一个函数，两边才不会对不上。
+const _dl=[], _dk=[];
+function collectDrops(a,W,H,u,out){
+  let n=0;
+  for(let i=0;i<DROPS.length;i++){
+    const d=DROPS[i];
+    const gr=(a-d.delay)/(1-d.delay); if(gr<=0) continue;
+    const g01=gr>1?1:gr;
+    const r=d.r*W*DROP_GROW(g01); if(r<0.0008) continue;
+    let o=_dl[n]; if(!o) o=_dl[n]={x:0,y:0,r:0,tr:0};
+    o.x=d.x*W; o.y=(u===null)? d.y*H : ((d.y+u*d.speed)%1)*H;
+    o.r=r; o.tr=d.trail? r*d.trail : 0;
+    n++;
+  }
+  _dl.length=n;
+  _dl.sort((p,q)=>q.r-p.r);
+  let kn=0;
+  for(let i=0;i<n;i++){
+    const it=_dl[i]; let swallowed=false;
+    for(let k=0;k<kn;k++){
+      const b=out[k], dx=it.x-b.x, dy=it.y-b.y, rr=b.r-it.r*0.8;
+      if(rr>0 && dx*dx+dy*dy<rr*rr){ b.r=Math.sqrt(b.r*b.r+it.r*it.r); swallowed=true; break; }
+    }
+    if(!swallowed){ let o=out[kn]; if(!o) o=out[kn]={x:0,y:0,r:0,tr:0}; o.x=it.x; o.y=it.y; o.r=it.r; o.tr=it.tr; kn++; }
+  }
+  out.length=kn;
+  return kn;
+}
 // 预烘焙「覆盖率 vs 进度」曲线：这样才能把整片补的透明度补得刚好，
 // 让「露出 B 的面积」依然跟着进度走（和另外两种样式一致）。
 const COVLUT=(function(){
-  const M=96, N=144, lut=new Float32Array(33), grid=new Uint8Array(M*N);
+  const M=96, N=144, lut=new Float32Array(33), grid=new Uint8Array(M*N), tmp=[];
   for(let i=0;i<=32;i++){
     const a=i/32; grid.fill(0);
-    for(let k=0;k<DROPS.length;k++){
-      const d=DROPS[k];
-      const gr=(a-d.delay)/(1-d.delay); if(gr<=0) continue;
-      const r=d.r*DROP_GROW(gr>1?1:gr);
+    const kn=collectDrops(a,1,1.5,null,tmp);          // 归一化坐标下算，和屏幕上同一套合并逻辑
+    for(let k=0;k<kn;k++){
+      const d=tmp[k], r=d.r;
       const x0=Math.max(0,Math.floor((d.x-r)*M)), x1=Math.min(M-1,Math.ceil((d.x+r)*M));
       const y0=Math.max(0,Math.floor((d.y-r)/1.5*N)), y1=Math.min(N-1,Math.ceil((d.y+r)/1.5*N));
       for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
@@ -382,24 +410,38 @@ function capsulePath(g,x,y,w,h,r){
   g.lineTo(x,y+r); g.arc(x+r,y+r,r,Math.PI,Math.PI*1.5);
   g.closePath();
 }
+// 水珠内的折射：以 (cx,cy) 为中心、放大 m 倍显示背景（源画布已按 K 放大，所以源矩形取 目标宽 × K/m）
+function dropRefract(g,src,cx,cy,w,h,K,m){
+  const sw=w*K/m, sh=h*K/m;
+  g.drawImage(src, cx*K-sw/2, cy*K-sh/2, sw, sh, cx-w/2, cy-h/2, w, h);
+}
+// 水痕：细窄的一条，折射很弱（m≈1.05），顶端渐隐
+function drawStreak(g,src,x,y,w,h,K){
+  g.save();
+  g.beginPath(); capsulePath(g,x,y,w,h,w/2); g.clip();
+  dropRefract(g,src,x+w/2,y+h/2,w,h,K,1.05);
+  const gr=g.createLinearGradient(0,y,0,y+h*0.85);
+  gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+  g.globalCompositeOperation='destination-out';
+  g.fillStyle=gr; g.fillRect(x,y,w,h*0.85);
+  g.globalCompositeOperation='source-over';
+  g.restore();
+}
+const rainKept=[];
 function drawRain(g,W,H,a,u){
   const rA=srcRect(imgA), K=1.18;
   g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
   const src=rainSource(W,H);
-  for(let i=0;i<DROPS.length;i++){
-    const d=DROPS[i];
-    const gr=(a-d.delay)/(1-d.delay); if(gr<=0) continue;
-    const g01=gr>1?1:gr;
-    const r=d.r*W*DROP_GROW(g01); if(r<0.7) continue;
-    const cy=((d.y+u*d.speed)%1)*H, cx=d.x*W;
-    const th=d.trail? r*d.trail : 0, w=2*r, h=2*r+th, x=cx-r, y=cy-th;
+  const kn=collectDrops(a,W,H,u,rainKept);     // 收集 + 合并
+  // 画：先水痕再水珠
+  for(let i=0;i<kn;i++){
+    const it=rainKept[i];
+    if(it.tr>0) drawStreak(g,src,it.x-it.r*0.26,it.y-it.tr-it.r*0.55,it.r*0.52,it.tr+it.r*0.55,K);
     g.save();
-    if(th>0) capsulePath(g,x,y,w,h,r); else { g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); }
-    g.clip();
-    // 折射：水珠里显示「围绕自己放大 K 倍」的背景（源画布已按 K 放大，所以取同样大小的源矩形）
-    g.drawImage(src, cx*K-r, cy*K-th, w, h, x, y, w, h);
+    g.beginPath(); g.arc(it.x,it.y,it.r,0,Math.PI*2); g.clip();
+    dropRefract(g,src,it.x,it.y,it.r*2,it.r*2,K,K);
     g.restore();
-    g.drawImage(DROP_SPRITE, cx-r*1.06, cy-r*1.06, r*2.12, r*2.12);
+    g.drawImage(DROP_SPRITE, it.x-it.r*1.06, it.y-it.r*1.06, it.r*2.12, it.r*2.12);
   }
   // 整片补：按预烘焙的覆盖率曲线补差，让「露出 B 的面积」正好跟上进度
   const cov=coverAt(a);
