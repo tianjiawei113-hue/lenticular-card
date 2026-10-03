@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v12 · 雨滴：合并 + 水痕</em></h1>
+<h1>变 画 卡 工 坊 <em>v13 · 雨滴：不规则的透镜层</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -108,7 +108,7 @@
   <label>溶解样式
     <select id="Fsty">
       <option value="wave" selected>水波</option>
-      <option value="rain">雨滴</option>
+      <option value="rain">雨滴（透镜层 · 与倾斜无关）</option>
     </select>
   </label>
   <label>波纹大小 <input id="Fsc" type="range" min="0.5" max="8" step="0.5" value="3.5"><b id="Fscv">3.5</b></label>
@@ -305,7 +305,7 @@ function sampleTile(T,u,v){                    // 双线性采样 + 环绕
   return ((a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf)*0.00392156862745098;
 }
 function nz(u,v){ return sampleTile(NOISE,u,v); }
-// ===== 雨滴：按 raindrop-fx / codrops RainEffect 的路子 —— 水珠折射背景 + 高光 + 拖尾 + 下滑 =====
+// ===== 雨滴：一层「透镜」——只有水珠里透出下层图，和转动无关 =====
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 const DROPS=(function(){
   const rnd=mulberry32(20261003), arr=[];
@@ -313,82 +313,39 @@ const DROPS=(function(){
     const big=rnd()<0.11;
     arr.push({
       x:rnd(), y:rnd(),
-      r: big ? 0.030+rnd()*0.040 : 0.006+rnd()*0.016,   // 相对卡片宽度
-      speed: rnd()<0.75 ? 1 : 2,                          // 取整数 → 走一整圈回到原位，GIF 循环无缝
-      trail: rnd()<0.30 ? 0.6+rnd()*1.8 : 0,              // >0：带上拖尾（滑过留下的水痕）
-      delay: rnd()*0.55,                                  // 出现时间错开，雨是渐渐下大的
-      seed: rnd()
+      r: big ? 0.030+rnd()*0.040 : 0.006+rnd()*0.016,
+      speed: rnd()<0.75 ? 1 : 2,
+      trail: rnd()<0.32 ? 0.7+rnd()*2.0 : 0,
+      asp: 0.80+rnd()*0.45,                 // 纵向拉伸：挂在玻璃上的水珠不是正圆
+      rot: (rnd()-0.5)*0.8,                 // 各自歪一点
+      p1: rnd()*6.283, p2: rnd()*6.283,     // 外形的不规则（3 瓣 + 5 瓣扰动）
+      ph: rnd()                             // 涨落相位（雨有疏密）
     });
   }
   return arr;
 })();
-const DROP_GROW=(g01)=>0.5+2.6*Math.pow(g01,1.4);      // 水珠随进度长大（0.5 → 3.1 倍）
-// 收集当前可见水珠并做合并：大的先占位，被大珠包住的小珠并进去（面积守恒 → 大珠会鼓起来）。
-// 烘焙覆盖率曲线和实际绘制都走这一个函数，两边才不会对不上。
-const _dl=[], _dk=[];
-function collectDrops(a,W,H,u,out){
-  let n=0;
-  for(let i=0;i<DROPS.length;i++){
-    const d=DROPS[i];
-    const gr=(a-d.delay)/(1-d.delay); if(gr<=0) continue;
-    const g01=gr>1?1:gr;
-    const r=d.r*W*DROP_GROW(g01); if(r<0.0008) continue;
-    let o=_dl[n]; if(!o) o=_dl[n]={x:0,y:0,r:0,tr:0};
-    o.x=d.x*W; o.y=(u===null)? d.y*H : ((d.y+u*d.speed)%1)*H;
-    o.r=r; o.tr=d.trail? r*d.trail : 0;
-    n++;
+const CIRC=(function(){ const c=new Float32Array(26), s=new Float32Array(26);
+  for(let i=0;i<26;i++){ const a=i/26*Math.PI*2; c[i]=Math.cos(a); s[i]=Math.sin(a); } return [c,s]; })();
+function dropPath(g,x,y,r,asp,rot,p1,p2){
+  const ca=Math.cos(rot), sa=Math.sin(rot);
+  g.beginPath();
+  for(let i=0;i<26;i++){
+    const th=i/26*Math.PI*2;
+    const rr=r*(1+0.11*Math.sin(3*th+p1)+0.06*Math.sin(5*th+p2));
+    const px=CIRC[0][i]*rr, py=CIRC[1][i]*rr*asp;
+    const qx=px*ca-py*sa, qy=px*sa+py*ca;
+    if(i===0) g.moveTo(x+qx,y+qy); else g.lineTo(x+qx,y+qy);
   }
-  _dl.length=n;
-  _dl.sort((p,q)=>q.r-p.r);
-  let kn=0;
-  for(let i=0;i<n;i++){
-    const it=_dl[i]; let swallowed=false;
-    for(let k=0;k<kn;k++){
-      const b=out[k], dx=it.x-b.x, dy=it.y-b.y, rr=b.r-it.r*0.8;
-      if(rr>0 && dx*dx+dy*dy<rr*rr){ b.r=Math.sqrt(b.r*b.r+it.r*it.r); swallowed=true; break; }
-    }
-    if(!swallowed){ let o=out[kn]; if(!o) o=out[kn]={x:0,y:0,r:0,tr:0}; o.x=it.x; o.y=it.y; o.r=it.r; o.tr=it.tr; kn++; }
-  }
-  out.length=kn;
-  return kn;
+  g.closePath();
 }
-// 预烘焙「覆盖率 vs 进度」曲线：这样才能把整片补的透明度补得刚好，
-// 让「露出 B 的面积」依然跟着进度走（和另外两种样式一致）。
-const COVLUT=(function(){
-  const M=96, N=144, lut=new Float32Array(33), grid=new Uint8Array(M*N), tmp=[];
-  for(let i=0;i<=32;i++){
-    const a=i/32; grid.fill(0);
-    const kn=collectDrops(a,1,1.5,null,tmp);          // 归一化坐标下算，和屏幕上同一套合并逻辑
-    for(let k=0;k<kn;k++){
-      const d=tmp[k], r=d.r;
-      const x0=Math.max(0,Math.floor((d.x-r)*M)), x1=Math.min(M-1,Math.ceil((d.x+r)*M));
-      const y0=Math.max(0,Math.floor((d.y-r)/1.5*N)), y1=Math.min(N-1,Math.ceil((d.y+r)/1.5*N));
-      for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
-        const dx=(x+0.5)/M-d.x, dy=((y+0.5)/N*1.5)-d.y;
-        if(dx*dx+dy*dy<r*r) grid[y*M+x]=1;
-      }
-    }
-    let hit=0; for(let j=0;j<grid.length;j++) hit+=grid[j];
-    lut[i]=hit/(M*N);
-  }
-  return lut;
-})();
-function coverAt(a){
-  const x=Math.max(0,Math.min(1,a))*32, i=x|0;
-  return i>=32 ? COVLUT[32] : COVLUT[i]+(COVLUT[i+1]-COVLUT[i])*(x-i);
-}
-// 水珠高光贴图（只烘一次）：左上镜面高光 + 下缘亮边 + 上缘暗边 = 一颗珠子
-const DROP_SPRITE=(function(){
-  const S=96, c=document.createElement('canvas'); c.width=S; c.height=S;
+// 镜面高光：一块软斑（不是一个圆环，所以不会显得"太圆"）
+const SPEC=(function(){
+  const S=64,c=document.createElement('canvas'); c.width=S; c.height=S;
   const x=c.getContext('2d');
-  const g=x.createRadialGradient(S*0.34,S*0.30,S*0.02,S*0.5,S*0.5,S*0.5);
-  g.addColorStop(0,'rgba(255,255,255,0.92)'); g.addColorStop(0.16,'rgba(255,255,255,0.28)');
-  g.addColorStop(0.55,'rgba(255,255,255,0)'); g.addColorStop(1,'rgba(255,255,255,0)');
+  const g=x.createRadialGradient(S*0.36,S*0.32,S*0.01,S*0.36,S*0.32,S*0.44);
+  g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.34,'rgba(255,255,255,0.26)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
   x.fillStyle=g; x.fillRect(0,0,S,S);
-  x.lineWidth=S*0.055; x.strokeStyle='rgba(255,255,255,0.5)';
-  x.beginPath(); x.arc(S*0.5,S*0.5,S*0.40,0.15*Math.PI,0.95*Math.PI); x.stroke();
-  x.strokeStyle='rgba(0,0,0,0.26)';
-  x.beginPath(); x.arc(S*0.5,S*0.5,S*0.42,1.05*Math.PI,1.9*Math.PI); x.stroke();
   return c;
 })();
 let rainSrc=null, rainSrcKey='';
@@ -410,12 +367,12 @@ function capsulePath(g,x,y,w,h,r){
   g.lineTo(x,y+r); g.arc(x+r,y+r,r,Math.PI,Math.PI*1.5);
   g.closePath();
 }
-// 水珠内的折射：以 (cx,cy) 为中心、放大 m 倍显示背景（源画布已按 K 放大，所以源矩形取 目标宽 × K/m）
+// 水珠内的折射：以 (cx,cy) 为中心、放大 m 倍显示下层（源画布已按 K 放大，故源矩形取 目标宽 × K/m）
 function dropRefract(g,src,cx,cy,w,h,K,m){
   const sw=w*K/m, sh=h*K/m;
   g.drawImage(src, cx*K-sw/2, cy*K-sh/2, sw, sh, cx-w/2, cy-h/2, w, h);
 }
-// 水痕：细窄的一条，折射很弱（m≈1.05），顶端渐隐
+// 水痕：细窄一条，折射很弱（m≈1.05），顶端渐隐
 function drawStreak(g,src,x,y,w,h,K){
   g.save();
   g.beginPath(); capsulePath(g,x,y,w,h,w/2); g.clip();
@@ -427,66 +384,63 @@ function drawStreak(g,src,x,y,w,h,K){
   g.globalCompositeOperation='source-over';
   g.restore();
 }
-const rainKept=[];
-function drawRain(g,W,H,a,u){
+// 收集水珠并合并（大的吞小的，面积守恒）。大小只跟时间有关 → 和倾斜进度无关。
+const _dl=[], rainKept=[];
+function collectDrops(W,H,u,out){
+  let n=0;
+  for(let i=0;i<DROPS.length;i++){
+    const d=DROPS[i];
+    const r=d.r*W*(0.80+0.20*Math.sin(TWO_PI*(u*0.25+d.ph)));   // 慢速涨落，雨有疏密
+    if(r<0.0008) continue;
+    let o=_dl[n]; if(!o) o=_dl[n]={x:0,y:0,r:0,tr:0,d:null};
+    o.x=d.x*W; o.y=((d.y+u*d.speed)%1)*H; o.r=r; o.tr=d.trail? r*d.trail : 0; o.d=d;
+    n++;
+  }
+  _dl.length=n;
+  _dl.sort((p,q)=>q.r-p.r);
+  let kn=0;
+  for(let i=0;i<n;i++){
+    const it=_dl[i]; let swallowed=false;
+    for(let k=0;k<kn;k++){
+      const b=out[k], dx=it.x-b.x, dy=it.y-b.y, rr=b.r-it.r*0.8;
+      if(rr>0 && dx*dx+dy*dy<rr*rr){ b.r=Math.sqrt(b.r*b.r+it.r*it.r); swallowed=true; break; }
+    }
+    if(!swallowed){ let o=out[kn]; if(!o) o=out[kn]={x:0,y:0,r:0,tr:0,d:null}; o.x=it.x; o.y=it.y; o.r=it.r; o.tr=it.tr; o.d=it.d; kn++; }
+  }
+  out.length=kn;
+  return kn;
+}
+// 底图始终是 A；只有水珠里透出 B（折射透镜）。整片不做淡入、不看倾斜进度。
+function drawRain(g,W,H,u){
   const rA=srcRect(imgA), K=1.18;
   g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
   const src=rainSource(W,H);
-  const kn=collectDrops(a,W,H,u,rainKept);     // 收集 + 合并
-  // 画：先水痕再水珠
+  const kn=collectDrops(W,H,u,rainKept);
   for(let i=0;i<kn;i++){
-    const it=rainKept[i];
-    if(it.tr>0) drawStreak(g,src,it.x-it.r*0.26,it.y-it.tr-it.r*0.55,it.r*0.52,it.tr+it.r*0.55,K);
+    const it=rainKept[i], d=it.d, r=it.r;
+    if(it.tr>0) drawStreak(g,src,it.x-r*0.26,it.y-it.tr-r*0.55,r*0.52,it.tr+r*0.55,K);
     g.save();
-    g.beginPath(); g.arc(it.x,it.y,it.r,0,Math.PI*2); g.clip();
-    dropRefract(g,src,it.x,it.y,it.r*2,it.r*2,K,K);
+    dropPath(g,it.x,it.y,r,d.asp,d.rot,d.p1,d.p2);
+    g.clip();
+    dropRefract(g,src,it.x,it.y,r*2,r*2,K,K);
     g.restore();
-    g.drawImage(DROP_SPRITE, it.x-it.r*1.06, it.y-it.r*1.06, it.r*2.12, it.r*2.12);
-  }
-  // 整片补：按预烘焙的覆盖率曲线补差，让「露出 B 的面积」正好跟上进度
-  const cov=coverAt(a);
-  const f=(a-cov)/Math.max(0.02,1-cov);
-  if(f>0){
-    const rB=srcRect(imgB);
-    g.globalAlpha=f>1?1:f;
-    g.drawImage(imgB, rB[0],rB[1],rB[2],rB[3], 0,0,W,H);
-    g.globalAlpha=1;
+    g.save();
+    dropPath(g,it.x,it.y,r,d.asp,d.rot,d.p1,d.p2);
+    const lg=g.createLinearGradient(it.x-r,it.y-r,it.x+r,it.y+r);
+    lg.addColorStop(0,'rgba(255,255,255,0.50)');
+    lg.addColorStop(0.5,'rgba(255,255,255,0.04)');
+    lg.addColorStop(1,'rgba(0,0,0,0.30)');
+    g.lineWidth=Math.max(0.8,r*0.075); g.strokeStyle=lg; g.stroke();
+    g.restore();
+    g.drawImage(SPEC, it.x-r*0.80, it.y-r*0.88, r*0.95, r*0.95);
   }
 }
-// 波场分布拉平：采样一遍波场的取值分布，做出「值 → 均匀分位」查表。
-// 有了它，即使形状是水波，「露出 B 的面积」依然等于过渡进度 a。
-const FW=0.75;                                   // 噪声扰动权重
-// 快速正弦（4096 项查表 + 位与取模）：逐像素算三路波，用 Math.sin 太贵
-const SINT=(function(){ const t=new Float32Array(4096); for(let i=0;i<4096;i++) t[i]=Math.sin(i/4096*TWO_PI); return t; })();
-const SIN_K=4096/TWO_PI, SIN_BIAS=8388608;       // 2^23，是 4096 的整数倍
-function fsin(x){ return SINT[((x*SIN_K+SIN_BIAS)|0)&4095]; }
-const FF=(function(){
-  const BINS=1024, N=80000, rg=3.0;
-  const vals=new Float32Array(N);
-  let mn=1e9, mx=-1e9;
-  for(let i=0;i<N;i++){
-    const px=Math.random()*2-0.5, py=Math.random()*1.7-0.35;
-    const ph=Math.random()*TWO_PI, un=Math.random()-0.5;
-    const rx=px-0.5, ry=py-0.5;
-    const v=0.55*Math.sin(rg*TWO_PI*Math.sqrt(rx*rx+ry*ry)-ph)
-           +0.25*Math.sin(rg*TWO_PI*1.55*(0.86*px+0.51*py)-ph*0.7)
-           +0.20*Math.sin(rg*TWO_PI*1.25*(-0.51*px+0.86*py)+ph*0.55)
-           +FW*un;
-    vals[i]=v; if(v<mn)mn=v; if(v>mx)mx=v;
-  }
-  const sc=(BINS-1)/(mx-mn), hist=new Uint32Array(BINS);
-  for(let i=0;i<N;i++){ let q=((vals[i]-mn)*sc)|0; if(q<0)q=0; else if(q>=BINS)q=BINS-1; hist[q]++; }
-  const lut=new Uint8Array(BINS); let acc=0;
-  for(let i=0;i<BINS;i++){ acc+=hist[i]; lut[i]=Math.round(acc/N*255); }
-  return {lut, mn, sc};
-})();
-let flowFill=null, flowGlow=null, flowLayer=null;
 let fcolA=null, fcolB=null, fcolT=null, frowA=null, frowB=null;
 function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } return c; }
 // u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
 function renderFlow(g,W,H,u){
   const a=ratioB();
-  if(FSTYLE==='rain'){ drawRain(g,W,H,a,u); return; }   // 雨滴是另一套（折射珠子），不走蒙版
+  if(FSTYLE==='rain'){ drawRain(g,W,H,u); return; }     // 雨滴是一层透镜，和倾斜进度无关
   const rA=srcRect(imgA), rB=srcRect(imgB);
   g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
   if(a<=0.002) return;
