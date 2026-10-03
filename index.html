@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v22 · 雨滴：单图 + 水痕擦出清晰</em></h1>
+<h1>变 画 卡 工 坊 <em>v23 · 湿玻璃清晰度可调</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -120,6 +120,7 @@
   <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="20"><b id="Fsov">20</b></label>
   <label>流动速度 <input id="Ffl" type="range" min="0" max="100" step="1" value="35"><b id="Fflv">35</b></label>
   <label>边缘发光 <input id="Fgl" type="range" min="0" max="70" step="1" value="24"><b id="Fglv">24</b></label>
+  <label>湿玻璃清晰度 <input id="Rbl" type="range" min="0" max="5" step="1" value="3"><b id="Rblv">3</b></label>
 </div>
 
 <div class="panel">
@@ -630,7 +631,7 @@ async function rfxStart(W,H){
       rfx=new RaindropFX({ canvas:rcv,
         spawnSize:[24,70], spawnInterval:[0.06,0.16], spawnLimit:800,
         slipRate:0.55, motionInterval:[0.4,1.6], xShifting:[-0.04,0.04],
-        backgroundBlurSteps:1, mist:true, mistTime:1.2, mistBlurStep:2 });   // 底图接近清晰，湿感交给雾气：
+        backgroundBlurSteps:3, mist:true, mistTime:1.2, mistBlurStep:4 });   // 底图接近清晰，湿感交给雾气：
                                                                              // 水珠/水痕擦过的地方就露出清晰画面
       const c0=sceneCanvas('A');                    // 先给背景，再启动（顺序反了会报错）
       if(c0 && !rfxScene){ await rfx.setBackground(c0); rfxScene='A'; }
@@ -716,7 +717,7 @@ function syncMode(){
   s.disabled=lens; s.parentNode.style.opacity=lens?0.4:1;
   l.disabled=!lens; l.parentNode.style.opacity=lens?1:0.4;
   const flow=(MODE==='flow');
-  ['Fsc','Fso','Ffl','Fgl'].forEach(function(id){
+  ['Fsc','Fso','Ffl','Fgl','Rbl'].forEach(function(id){
     const el=document.getElementById(id);
     el.disabled=!flow; el.parentNode.style.opacity=flow?1:0.45;
   });
@@ -728,6 +729,11 @@ document.getElementById('Fsty').onchange=function(){ FSTYLE=this.value; draw(); 
 document.getElementById('Fso').oninput=function(){ FSO=Number(this.value); document.getElementById('Fsov').textContent=this.value; draw(); };
 document.getElementById('Ffl').oninput=function(){ FFL=Number(this.value); document.getElementById('Fflv').textContent=this.value; draw(); };
 document.getElementById('Fgl').oninput=function(){ FGL=Number(this.value); document.getElementById('Fglv').textContent=this.value; draw(); };
+document.getElementById('Rbl').oninput=function(){          // 湿玻璃清晰度：0 = 底图完全清晰
+  const v=Number(this.value);
+  document.getElementById('Rblv').textContent=v;
+  if(rfx){ try{ rfx.options.backgroundBlurSteps=v; rfx.options.mistBlurStep=v+1; }catch(e){} rfxScene=''; if(MODE==='flow'&&FSTYLE==='rain') rfxTick(ratioB(),dispW,dispH); }
+};
 
 // 导出：按当前输出精度出底图，图案与预览完全一致（可印真卡）
 document.getElementById('png').onclick=function(){
