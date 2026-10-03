@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v8 · 溶解流动改用域扭曲噪声</em></h1>
+<h1>变 画 卡 工 坊 <em>v9 · 溶解流动改为水波</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -105,7 +105,7 @@
     </select>
   </label>
   <label>透镜宽度 <input id="L" type="range" min="2" max="16" step="1" value="4"><b id="Lv">4px</b></label>
-  <label>溶解尺度 <input id="Fsc" type="range" min="1" max="14" step="0.5" value="4.5"><b id="Fscv">4.5</b></label>
+  <label>波纹大小 <input id="Fsc" type="range" min="0.5" max="8" step="0.5" value="3.5"><b id="Fscv">3.5</b></label>
   <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="20"><b id="Fsov">20</b></label>
   <label>流动速度 <input id="Ffl" type="range" min="0" max="100" step="1" value="35"><b id="Fflv">35</b></label>
   <label>边缘发光 <input id="Fgl" type="range" min="0" max="70" step="1" value="24"><b id="Fglv">24</b></label>
@@ -251,28 +251,27 @@ function renderTo(g, W, H){
     x=x2;
   }
 }
-// ===== 「溶解流动」引擎：噪声阈值溶解 + 随角度流动 + 边界发光 =====
+// ===== 「溶解流动」引擎：水波干涉场（径向涟漪 + 两道斜波 + 噪声扰动）→ 阈值溶解 =====
 function smoothstep(e0,e1,x){ const u=Math.max(0,Math.min(1,(x-e0)/(e1-e0))); return u*u*(3-2*u); }
 function fract01(x){ return x-Math.floor(x); }
-const NT=256;                                  // 噪声贴图边长（只生成一次）
+const NT=256, PER=6, TWO_PI=Math.PI*2;
 const NOISE=(function(){
   const t=new Float32Array(NT*NT);
   const hash=(i,j)=>{ let n=(i*374761393+j*668265263)|0; n=(n^(n>>>13))*1274126177|0; return ((n^(n>>>16))>>>0)/4294967296; };
-  const vn=(x,y)=>{
+  const hw=(i,j,per)=>hash(((i%per)+per)%per, ((j%per)+per)%per);   // 按周期取模 → 贴图可无缝平铺
+  const vn=(x,y,per)=>{
     const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
     const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
-    const a=hash(xi,yi), b=hash(xi+1,yi), c=hash(xi,yi+1), d=hash(xi+1,yi+1);
-    return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
+    const a=hw(xi,yi,per), b=hw(xi+1,yi,per), c=hw(xi,yi+1,per), d=hw(xi+1,yi+1,per);
+    return (a+(b-a)*u)*(1-v)+(c+(d-c)*u)*v;
   };
-  // 低频为主（0.72/0.22/0.06）：保证形状是「整块的」而不是一堆碎点
-  const fn=(x,y)=>vn(x,y)*0.72+vn(x*2.03+5.2,y*2.03+1.3)*0.22+vn(x*4.01+9.1,y*4.01+3.7)*0.06;
+  // 低频为主（0.72/0.22/0.06）；每层频率都是整数倍 → 整张贴图首尾相接，平铺无接缝
+  const fn=(x,y)=>vn(x,y,PER)*0.72+vn(x*2,y*2,PER*2)*0.22+vn(x*4,y*4,PER*4)*0.06;
   for(let y=0;y<NT;y++) for(let x=0;x<NT;x++){
-    // 域扭曲（domain warping）：先用低频噪声算出偏移向量，再拿它去扰动采样点。
-    // 这一步是「液体/墨迹」质感的关键——没有它就是一团团圆乎乎的云朵块。
-    const fx=x/NT*5, fy=y/NT*5;
-    const wx=fn(fx*0.7+11.3,fy*0.7+4.1)-0.5;
-    const wy=fn(fx*0.7+27.7,fy*0.7+19.3)-0.5;
-    t[y*NT+x]=fn(fx+1.6*wx, fy+1.6*wy);
+    // 域扭曲：偏移量用整数平移，保证扭曲之后整块贴图依然周期一致
+    const fx=x/NT*PER, fy=y/NT*PER;
+    const wx=fn(fx+9,fy+3)-0.5, wy=fn(fx+4,fy+11)-0.5;
+    t[y*NT+x]=fn(fx+2.4*wx, fy+2.4*wy);
   }
   let mn=1e9,mx=-1e9;
   for(let i=0;i<t.length;i++){ if(t[i]<mn)mn=t[i]; if(t[i]>mx)mx=t[i]; }
@@ -298,7 +297,35 @@ function nz(u,v){                              // 双线性采样 + 环绕
   const a=NOISE[r0+x0], b=NOISE[r0+x1], c=NOISE[r1+x0], d=NOISE[r1+x1];
   return ((a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf)*0.00392156862745098;
 }
-let flowFill=null, flowGlow=null, flowLayer=null, rowSh=null, colSh=null, colBias=null;
+// 波场分布拉平：采样一遍波场的取值分布，做出「值 → 均匀分位」查表。
+// 有了它，即使形状是水波，「露出 B 的面积」依然等于过渡进度 a。
+const FW=0.75;                                   // 噪声扰动权重
+// 快速正弦（4096 项查表 + 位与取模）：逐像素算三路波，用 Math.sin 太贵
+const SINT=(function(){ const t=new Float32Array(4096); for(let i=0;i<4096;i++) t[i]=Math.sin(i/4096*TWO_PI); return t; })();
+const SIN_K=4096/TWO_PI, SIN_BIAS=8388608;       // 2^23，是 4096 的整数倍
+function fsin(x){ return SINT[((x*SIN_K+SIN_BIAS)|0)&4095]; }
+const FF=(function(){
+  const BINS=1024, N=150000, rg=3.0;
+  const vals=new Float32Array(N);
+  let mn=1e9, mx=-1e9;
+  for(let i=0;i<N;i++){
+    const px=Math.random()*2-0.5, py=Math.random()*1.7-0.35;
+    const ph=Math.random()*TWO_PI, un=Math.random()-0.5;
+    const rx=px-0.5, ry=py-0.5;
+    const v=0.55*Math.sin(rg*TWO_PI*Math.sqrt(rx*rx+ry*ry)-ph)
+           +0.25*Math.sin(rg*TWO_PI*1.55*(0.86*px+0.51*py)-ph*0.7)
+           +0.20*Math.sin(rg*TWO_PI*1.25*(-0.51*px+0.86*py)+ph*0.55)
+           +FW*un;
+    vals[i]=v; if(v<mn)mn=v; if(v>mx)mx=v;
+  }
+  const sc=(BINS-1)/(mx-mn), hist=new Uint32Array(BINS);
+  for(let i=0;i<N;i++){ let q=((vals[i]-mn)*sc)|0; if(q<0)q=0; else if(q>=BINS)q=BINS-1; hist[q]++; }
+  const lut=new Uint8Array(BINS); let acc=0;
+  for(let i=0;i<BINS;i++){ acc+=hist[i]; lut[i]=Math.round(acc/N*255); }
+  return {lut, mn, sc};
+})();
+let flowFill=null, flowGlow=null, flowLayer=null;
+let fcolA=null, fcolB=null, fcolT=null, frowA=null, frowB=null;
 function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } return c; }
 // u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
 function renderFlow(g,W,H,u){
@@ -306,35 +333,48 @@ function renderFlow(g,W,H,u){
   const rA=srcRect(imgA), rB=srcRect(imgB);
   g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
   if(a<=0.002) return;
-  const mw=Math.max(24,Math.min(200,Math.round(W/3))), mh=Math.max(2,Math.round(mw*H/W));
+  const mw=Math.max(24,Math.min(160,Math.round(W/4))), mh=Math.max(2,Math.round(mw*H/W));
   flowFill=flowCv(flowFill,mw,mh); flowGlow=flowCv(flowGlow,mw,mh); flowLayer=flowCv(flowLayer,mw,mh);
-  if(!rowSh || rowSh.length<mh) rowSh=new Float32Array(mh);
-  if(!colSh || colSh.length<mw) colSh=new Float32Array(mw);
-  if(!colBias || colBias.length<mw) colBias=new Float32Array(mw);
+  if(!fcolA || fcolA.length<mw){ fcolA=new Float32Array(mw); fcolB=new Float32Array(mw); fcolT=new Float32Array(mw); }
+  if(!frowA || frowA.length<mh){ frowA=new Float32Array(mh); frowB=new Float32Array(mh); }
   const fctx=flowFill.getContext('2d'), gctx=flowGlow.getContext('2d');
   const fi=fctx.createImageData(mw,mh), gi=gctx.createImageData(mw,mh);
   const thr=1-a;                                // 阈值：a 越大，露出 B 的面积越大
-  const soft=Math.max(0.004, FSO/400);          // 边缘柔度（噪声域）
-  const cells=3+FSC*0.8;                        // 一屏的噪声格子数
-  const ang=u*Math.PI*2;
-  const dx0=Math.sin(ang)*0.9 + t*0.85;         // 环流 + 跟着倾斜方向走
-  const dy0=Math.cos(ang)*0.45;
-  // 三张每帧只算一次的查找表：把二维扰动降到「每像素多读一个数组」
-  for(let y=0;y<mh;y++) rowSh[y]=Math.sin((y/mw)*cells*1.15+ang)*0.34;      // 行错位（横向剪切）
-  for(let x=0;x<mw;x++) colSh[x]=Math.sin((x/mw)*cells*1.35+ang*1.7)*0.30;  // 列错位（纵向剪切）
-  const bias=t*0.30;                                                        // 顺着倾斜方向：溶解先从那一侧涌进来
-  for(let x=0;x<mw;x++) colBias[x]=bias*(x/mw-0.5);
+  const soft=Math.max(0.004, FSO/400);          // 边缘柔度
   const inv2s=1/(2*soft);
+  const rg=1.1+FSC*0.42;                        // 一屏几圈涟漪（越大越密）
+  const kr=rg*TWO_PI;
+  const ph0=u*TWO_PI;
+  const sx=0.5+t*0.26, sy=0.5-0.04;             // 涟漪源头：随倾斜左右挪
+  const phA=ph0*2.0-t*1.7, phB=ph0*1.3+t*1.1, phC=ph0*0.9-t*0.8;
+  const bias=t*0.18;                            // 顺着倾斜方向轻微偏置：从那侧涌进来
+  for(let x=0;x<mw;x++){
+    const px=x/mw;
+    fcolA[x]=kr*1.55*0.86*px-phB;
+    fcolB[x]=kr*1.25*(-0.51*px)+phC;
+    fcolT[x]=bias*(px-0.5);
+  }
+  for(let y=0;y<mh;y++){
+    const py=y/mw;
+    frowA[y]=kr*1.55*0.51*py;
+    frowB[y]=kr*1.25*0.86*py;
+  }
+  const noiseK=0.55/mw, nx0=Math.sin(ph0)*0.20+t*0.30, ny0=Math.cos(ph0)*0.12;
   const F=fi.data, G=gi.data;
-  const kx=cells/6/mw;                          // 像素 → 噪声贴图单位
-  const AXX=kx*0.62, AYY=kx;                    // 横向压得多一点，形状被拉成横向流动的丝
+  const fmn=FF.mn, fsc=FF.sc, flut=FF.lut;
   let p=0;
   for(let y=0;y<mh;y++){
-    const ny=y*AYY+dy0;
-    const xo=dx0+rowSh[y];
+    const ry=y/mw-sy, ry2=ry*ry;
+    const nb=frowA[y], nc=frowB[y], nyv=y*noiseK+ny0;
     for(let x=0;x<mw;x++,p+=4){
-      const v=nz(x*AXX+xo, ny+colSh[x])+colBias[x];
-      const d=(v-thr+soft)*inv2s;                // 归一化后再缓动，负半轴才对
+      const rx=x/mw-sx;
+      const f=0.55*fsin(kr*Math.sqrt(rx*rx+ry2)-phA)
+             +0.25*fsin(fcolA[x]+nb)
+             +0.20*fsin(fcolB[x]+nc)
+             +FW*(nz(x*noiseK+nx0, nyv)-0.5);
+      let q=((f-fmn)*fsc)|0; if(q<0)q=0; else if(q>1023)q=1023;
+      const v=flut[q]*0.00392156862745098+fcolT[x];
+      const d=(v-thr+soft)*inv2s;
       const mm=d<=0?0:(d>=1?1:d*d*(3-2*d));
       const e=4*mm*(1-mm);
       F[p]=255; F[p+1]=255; F[p+2]=255; F[p+3]=mm*255;
