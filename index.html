@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v14 · 雨滴：三层雨 + 蛋形 + 水膜模糊</em></h1>
+<h1>变 画 卡 工 坊 <em>v15 · 雨滴：光滑泪滴 + 细水痕</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -321,9 +321,9 @@ const DROPS=(function(){
        :            0.022+rnd()*0.048,
       speed: kind===0 ? 0 : (kind===1 ? 1 : 2),
       trail: kind===1 ? 0.9+rnd()*2.2 : (kind===2 ? 0.4+rnd()*1.3 : 0),
-      asp: 0.80+rnd()*0.45,                 // 纵向拉伸：挂在玻璃上的水珠不是正圆
-      rot: (rnd()-0.5)*0.8,                 // 各自歪一点
-      p1: rnd()*6.283, p2: rnd()*6.283,     // 外形的不规则（3 瓣 + 5 瓣扰动）
+      // 表面张力把水珠拉得很光滑：静止小珠几乎正圆，滑动的大珠是纵向拉长的泪滴
+      asp:   kind===0 ? 1.00+rnd()*0.10 : (kind===1 ? 1.16+rnd()*0.26 : 1.22+rnd()*0.30),
+      taper: kind===0 ? 0.04+rnd()*0.04 : (kind===1 ? 0.42+rnd()*0.10 : 0.34+rnd()*0.10),
       ph: rnd()                             // 涨落相位（雨有疏密）
     });
   }
@@ -331,20 +331,20 @@ const DROPS=(function(){
 })();
 const CIRC=(function(){ const c=new Float32Array(26), s=new Float32Array(26);
   for(let i=0;i<26;i++){ const a=i/26*Math.PI*2; c[i]=Math.cos(a); s[i]=Math.sin(a); } return [c,s]; })();
-function dropPath(g,x,y,r,asp,rot,p1,p2){
-  const ca=Math.cos(rot), sa=Math.sin(rot);
+// 光滑的泪滴轮廓：下半是圆，上半平滑收窄（taper 越大越尖）。没有随机起伏——
+// 真实水珠是表面张力拉出来的，不该是坑坑洼洼的水团。
+function dropPath(g,x,y,r,asp,taper){
   g.beginPath();
-  for(let i=0;i<26;i++){
-    const th=i/26*Math.PI*2;
-    const rr=r*(1+0.11*Math.sin(3*th+p1)+0.06*Math.sin(5*th+p2));
-    const px=CIRC[0][i]*rr, py=CIRC[1][i]*rr*asp;
-    let qx=px*ca-py*sa; const qy=px*sa+py*ca;
-    // 蛋形/泪滴：上半收窄（重力把尾巴往上拖），不是正圆也不是正椭圆
-    qx*=1-0.30*Math.max(0,-qy/r);
-    if(i===0) g.moveTo(x+qx,y+qy); else g.lineTo(x+qx,y+qy);
+  for(let i=0;i<=NARC;i++){
+    const th=i/NARC*Math.PI*2;
+    const up=Math.max(0,-Math.sin(th));            // 上半（画布里 y 向下，故 -sin 为上）
+    // 收窄只作用在横向：这样顶部又高又尖（真实滑动水珠），而不是被压矮
+    const px=x+Math.cos(th)*r*(1-taper*up*up), py=y+Math.sin(th)*r*asp;
+    if(i===0) g.moveTo(px,py); else g.lineTo(px,py);
   }
   g.closePath();
 }
+const NARC=28;
 // 镜面高光：一块软斑（不是一个圆环，所以不会显得"太圆"）
 const SPEC=(function(){
   const S=64,c=document.createElement('canvas'); c.width=S; c.height=S;
@@ -388,14 +388,23 @@ function dropRefract(g,src,cx,cy,w,h,K,m){
   g.drawImage(src, cx*K-sw/2, cy*K-sh/2, sw, sh, cx-w/2, cy-h/2, w, h);
 }
 // 水痕：细窄一条，折射很弱（m≈1.05），顶端渐隐
-function drawStreak(g,src,x,y,w,h,K){
+// 水痕：比珠子细得多的湿痕（下宽上尖），顶端渐隐。真实玻璃上滑过的痕是细水线，不是和珠子一样粗的胶囊。
+function drawStreak(g,src,cx,yBot,yTop,r,K){
+  const wBot=Math.max(0.8,r*0.34), wTop=Math.max(0.5,r*0.07), h=yBot-yTop;
+  if(h<=1) return;
   g.save();
-  g.beginPath(); capsulePath(g,x,y,w,h,w/2); g.clip();
-  dropRefract(g,src,x+w/2,y+h/2,w,h,K,1.05);
-  const gr=g.createLinearGradient(0,y,0,y+h*0.85);
-  gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+  g.beginPath();
+  g.moveTo(cx-wBot/2,yBot);
+  g.quadraticCurveTo(cx-wTop*1.15,yBot-h*0.5, cx-wTop/2,yTop);
+  g.lineTo(cx+wTop/2,yTop);
+  g.quadraticCurveTo(cx+wTop*1.15,yBot-h*0.5, cx+wBot/2,yBot);
+  g.closePath();
+  g.clip();
+  dropRefract(g,src,cx,(yBot+yTop)/2,wBot,h,K,1.03);
+  const gr=g.createLinearGradient(0,yTop,0,yBot);
+  gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(0.7,'rgba(0,0,0,0.3)'); gr.addColorStop(1,'rgba(0,0,0,0)');
   g.globalCompositeOperation='destination-out';
-  g.fillStyle=gr; g.fillRect(x,y,w,h*0.85);
+  g.fillStyle=gr; g.fillRect(cx-wBot,yTop,wBot*2,h);
   g.globalCompositeOperation='source-over';
   g.restore();
 }
@@ -433,21 +442,21 @@ function drawRain(g,W,H,u){
   const kn=collectDrops(W,H,u,rainKept);
   for(let i=0;i<kn;i++){
     const it=rainKept[i], d=it.d, r=it.r;
-    if(it.tr>0) drawStreak(g,src,it.x-r*0.26,it.y-it.tr-r*0.55,r*0.52,it.tr+r*0.55,K);
+    if(it.tr>0) drawStreak(g,src,it.x,it.y-r*0.12,it.y-it.tr-it.r*0.35,r,K);
     g.save();
-    dropPath(g,it.x,it.y,r,d.asp,d.rot,d.p1,d.p2);
+    dropPath(g,it.x,it.y,r,d.asp,d.taper);
     g.clip();
     dropRefract(g,src,it.x,it.y,r*2,r*2,K,K*(0.92+0.30*Math.min(1,r/(W*0.045))));   // 珠子越大，放大越强
     g.restore();
     g.save();
-    dropPath(g,it.x,it.y,r,d.asp,d.rot,d.p1,d.p2);
+    dropPath(g,it.x,it.y,r,d.asp,d.taper);
     const lg=g.createLinearGradient(it.x-r,it.y-r,it.x+r,it.y+r);
     lg.addColorStop(0,'rgba(255,255,255,0.50)');
     lg.addColorStop(0.5,'rgba(255,255,255,0.04)');
     lg.addColorStop(1,'rgba(0,0,0,0.30)');
     g.lineWidth=Math.max(0.8,r*0.075); g.strokeStyle=lg; g.stroke();
     g.restore();
-    g.drawImage(SPEC, it.x-r*0.80, it.y-r*0.88, r*0.95, r*0.95);
+    g.drawImage(SPEC, it.x-r*0.60, it.y-r*0.72*d.asp, r*0.85, r*0.85);   // 镜面反光点：随纵向拉伸往上挪
   }
 }
 let fcolA=null, fcolB=null, fcolT=null, frowA=null, frowB=null;
