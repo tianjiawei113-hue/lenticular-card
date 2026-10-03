@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v10 · 溶解样式：水波 / 雨滴</em></h1>
+<h1>变 画 卡 工 坊 <em>v11 · 雨滴改为折射水珠</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -305,43 +305,112 @@ function sampleTile(T,u,v){                    // 双线性采样 + 环绕
   return ((a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf)*0.00392156862745098;
 }
 function nz(u,v){ return sampleTile(NOISE,u,v); }
-// 雨滴贴图：周期化的 Voronoi 距离场（纵向拉长 → 水滴形状），同样做直方图均衡，
-// 于是「采样值」在 0..1 上均匀，露出 B 的面积依旧等于过渡进度。
-const RAIN=(function(){
-  const K=8, t=new Float32Array(NT*NT);
-  const rh=(i,j)=>{ let n=(i*374761393+j*668265263)|0; n=(n^(n>>>13))*1274126177|0; return ((n^(n>>>16))>>>0)/4294967296; };
-  const jx=new Float32Array(K*K), jy=new Float32Array(K*K);
-  for(let j=0;j<K;j++) for(let i=0;i<K;i++){
-    jx[j*K+i]=0.14+0.72*rh(i,j);
-    jy[j*K+i]=0.14+0.72*rh(i+7919,j+104729);
+// ===== 雨滴：按 raindrop-fx / codrops RainEffect 的路子 —— 水珠折射背景 + 高光 + 拖尾 + 下滑 =====
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const DROPS=(function(){
+  const rnd=mulberry32(20261003), arr=[];
+  for(let i=0;i<240;i++){
+    const big=rnd()<0.11;
+    arr.push({
+      x:rnd(), y:rnd(),
+      r: big ? 0.030+rnd()*0.040 : 0.006+rnd()*0.016,   // 相对卡片宽度
+      speed: rnd()<0.75 ? 1 : 2,                          // 取整数 → 走一整圈回到原位，GIF 循环无缝
+      trail: rnd()<0.30 ? 0.6+rnd()*1.8 : 0,              // >0：带上拖尾（滑过留下的水痕）
+      delay: rnd()*0.55,                                  // 出现时间错开，雨是渐渐下大的
+      seed: rnd()
+    });
   }
-  // 只看所在格的 3×3 邻域（种子索引按 K 取模 → 整块贴图无缝），比全量遍历快好几倍
-  for(let y=0;y<NT;y++) for(let x=0;x<NT;x++){
-    const fx=x/NT*K, fy=y/NT*K;
-    const cx=Math.floor(fx), cy=Math.floor(fy);
-    let best=1e18;
-    for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){
-      const wx=((cx+i)%K+K)%K, wy=((cy+j)%K+K)%K, id=wy*K+wx;
-      const dx=x/NT-(cx+i+jx[id])/K, dy=(y/NT-(cy+j+jy[id])/K)*1.32;   // 纵向拉长，像挂在玻璃上的水珠
-      const d=dx*dx+dy*dy;
-      if(d<best) best=d;
-    }
-    t[y*NT+x]=Math.sqrt(best);
-  }
-  let mn=1e9,mx=-1e9;
-  for(let i=0;i<t.length;i++){ if(t[i]<mn)mn=t[i]; if(t[i]>mx)mx=t[i]; }
-  const u8=new Uint8Array(t.length);
-  for(let i=0;i<t.length;i++) u8[i]=Math.round((t[i]-mn)/(mx-mn)*255);
-  const hist=new Uint32Array(256), cdf=new Uint32Array(256);
-  for(let i=0;i<u8.length;i++) hist[u8[i]]++;
-  let acc=0;
-  for(let i=0;i<256;i++){ acc+=hist[i]; cdf[i]=acc; }
-  const lut=new Uint8Array(256);
-  for(let i=0;i<256;i++) lut[i]=Math.round(cdf[i]/u8.length*255);
-  for(let i=0;i<u8.length;i++) u8[i]=lut[u8[i]];
-  return u8;
+  return arr;
 })();
-function nzr(u,v){ return sampleTile(RAIN,u,v); }
+const DROP_GROW=(g01)=>0.5+2.6*Math.pow(g01,1.4);      // 水珠随进度长大（0.5 → 3.1 倍）
+// 预烘焙「覆盖率 vs 进度」曲线：这样才能把整片补的透明度补得刚好，
+// 让「露出 B 的面积」依然跟着进度走（和另外两种样式一致）。
+const COVLUT=(function(){
+  const M=96, N=144, lut=new Float32Array(33), grid=new Uint8Array(M*N);
+  for(let i=0;i<=32;i++){
+    const a=i/32; grid.fill(0);
+    for(let k=0;k<DROPS.length;k++){
+      const d=DROPS[k];
+      const gr=(a-d.delay)/(1-d.delay); if(gr<=0) continue;
+      const r=d.r*DROP_GROW(gr>1?1:gr);
+      const x0=Math.max(0,Math.floor((d.x-r)*M)), x1=Math.min(M-1,Math.ceil((d.x+r)*M));
+      const y0=Math.max(0,Math.floor((d.y-r)/1.5*N)), y1=Math.min(N-1,Math.ceil((d.y+r)/1.5*N));
+      for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+        const dx=(x+0.5)/M-d.x, dy=((y+0.5)/N*1.5)-d.y;
+        if(dx*dx+dy*dy<r*r) grid[y*M+x]=1;
+      }
+    }
+    let hit=0; for(let j=0;j<grid.length;j++) hit+=grid[j];
+    lut[i]=hit/(M*N);
+  }
+  return lut;
+})();
+function coverAt(a){
+  const x=Math.max(0,Math.min(1,a))*32, i=x|0;
+  return i>=32 ? COVLUT[32] : COVLUT[i]+(COVLUT[i+1]-COVLUT[i])*(x-i);
+}
+// 水珠高光贴图（只烘一次）：左上镜面高光 + 下缘亮边 + 上缘暗边 = 一颗珠子
+const DROP_SPRITE=(function(){
+  const S=96, c=document.createElement('canvas'); c.width=S; c.height=S;
+  const x=c.getContext('2d');
+  const g=x.createRadialGradient(S*0.34,S*0.30,S*0.02,S*0.5,S*0.5,S*0.5);
+  g.addColorStop(0,'rgba(255,255,255,0.92)'); g.addColorStop(0.16,'rgba(255,255,255,0.28)');
+  g.addColorStop(0.55,'rgba(255,255,255,0)'); g.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=g; x.fillRect(0,0,S,S);
+  x.lineWidth=S*0.055; x.strokeStyle='rgba(255,255,255,0.5)';
+  x.beginPath(); x.arc(S*0.5,S*0.5,S*0.40,0.15*Math.PI,0.95*Math.PI); x.stroke();
+  x.strokeStyle='rgba(0,0,0,0.26)';
+  x.beginPath(); x.arc(S*0.5,S*0.5,S*0.42,1.05*Math.PI,1.9*Math.PI); x.stroke();
+  return c;
+})();
+let rainSrc=null, rainSrcKey='';
+function rainSource(W,H){
+  const key=W+'x'+H+'_'+(imgB?imgB.width+'x'+imgB.height:'');
+  if(rainSrc && rainSrcKey===key) return rainSrc;
+  const k=1.18, c=flowCv(rainSrc,Math.round(W*k),Math.round(H*k));
+  const x=c.getContext('2d'), rB=srcRect(imgB);
+  x.clearRect(0,0,c.width,c.height);
+  x.drawImage(imgB, rB[0],rB[1],rB[2],rB[3], 0,0,c.width,c.height);
+  rainSrc=c; rainSrcKey=key;
+  return c;
+}
+function capsulePath(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.arc(x+w-r,y+r,r,-Math.PI/2,0);
+  g.lineTo(x+w,y+h-r); g.arc(x+w-r,y+h-r,r,0,Math.PI/2);
+  g.lineTo(x+r,y+h); g.arc(x+r,y+h-r,r,Math.PI/2,Math.PI);
+  g.lineTo(x,y+r); g.arc(x+r,y+r,r,Math.PI,Math.PI*1.5);
+  g.closePath();
+}
+function drawRain(g,W,H,a,u){
+  const rA=srcRect(imgA), K=1.18;
+  g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
+  const src=rainSource(W,H);
+  for(let i=0;i<DROPS.length;i++){
+    const d=DROPS[i];
+    const gr=(a-d.delay)/(1-d.delay); if(gr<=0) continue;
+    const g01=gr>1?1:gr;
+    const r=d.r*W*DROP_GROW(g01); if(r<0.7) continue;
+    const cy=((d.y+u*d.speed)%1)*H, cx=d.x*W;
+    const th=d.trail? r*d.trail : 0, w=2*r, h=2*r+th, x=cx-r, y=cy-th;
+    g.save();
+    if(th>0) capsulePath(g,x,y,w,h,r); else { g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); }
+    g.clip();
+    // 折射：水珠里显示「围绕自己放大 K 倍」的背景（源画布已按 K 放大，所以取同样大小的源矩形）
+    g.drawImage(src, cx*K-r, cy*K-th, w, h, x, y, w, h);
+    g.restore();
+    g.drawImage(DROP_SPRITE, cx-r*1.06, cy-r*1.06, r*2.12, r*2.12);
+  }
+  // 整片补：按预烘焙的覆盖率曲线补差，让「露出 B 的面积」正好跟上进度
+  const cov=coverAt(a);
+  const f=(a-cov)/Math.max(0.02,1-cov);
+  if(f>0){
+    const rB=srcRect(imgB);
+    g.globalAlpha=f>1?1:f;
+    g.drawImage(imgB, rB[0],rB[1],rB[2],rB[3], 0,0,W,H);
+    g.globalAlpha=1;
+  }
+}
 // 波场分布拉平：采样一遍波场的取值分布，做出「值 → 均匀分位」查表。
 // 有了它，即使形状是水波，「露出 B 的面积」依然等于过渡进度 a。
 const FW=0.75;                                   // 噪声扰动权重
@@ -375,6 +444,7 @@ function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==
 // u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
 function renderFlow(g,W,H,u){
   const a=ratioB();
+  if(FSTYLE==='rain'){ drawRain(g,W,H,a,u); return; }   // 雨滴是另一套（折射珠子），不走蒙版
   const rA=srcRect(imgA), rB=srcRect(imgB);
   g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
   if(a<=0.002) return;
@@ -405,28 +475,20 @@ function renderFlow(g,W,H,u){
     frowB[y]=kr*1.25*0.86*py;
   }
   const noiseK=0.55/mw, nx0=Math.sin(ph0)*0.20+t*0.30, ny0=Math.cos(ph0)*0.12;
-  const rain=(FSTYLE==='rain');
-  const rainK=(0.9+FSC*0.32)/mw, rainX=Math.sin(ph0)*0.06+t*0.18, rainY=-u;  // 雨滴：整片玻璃往下淌
   const F=fi.data, G=gi.data;
   const fmn=FF.mn, fsc=FF.sc, flut=FF.lut;
   let p=0;
   for(let y=0;y<mh;y++){
     const ry=y/mw-sy, ry2=ry*ry;
     const nb=frowA[y], nc=frowB[y], nyv=y*noiseK+ny0;
-    const ryv=y*rainK+rainY;
     for(let x=0;x<mw;x++,p+=4){
-      let v;
-      if(rain){
-        v=nzr(x*rainK+rainX, ryv)+fcolT[x];
-      }else{
-        const rx=x/mw-sx;
-        const f=0.55*fsin(kr*Math.sqrt(rx*rx+ry2)-phA)
-               +0.25*fsin(fcolA[x]+nb)
-               +0.20*fsin(fcolB[x]+nc)
-               +FW*(nz(x*noiseK+nx0, nyv)-0.5);
-        let q=((f-fmn)*fsc)|0; if(q<0)q=0; else if(q>1023)q=1023;
-        v=flut[q]*0.00392156862745098+fcolT[x];
-      }
+      const rx=x/mw-sx;
+      const f=0.55*fsin(kr*Math.sqrt(rx*rx+ry2)-phA)
+             +0.25*fsin(fcolA[x]+nb)
+             +0.20*fsin(fcolB[x]+nc)
+             +FW*(nz(x*noiseK+nx0, nyv)-0.5);
+      let q=((f-fmn)*fsc)|0; if(q<0)q=0; else if(q>1023)q=1023;
+      const v=flut[q]*0.00392156862745098+fcolT[x];
       const d=(v-thr+soft)*inv2s;
       const mm=d<=0?0:(d>=1?1:d*d*(3-2*d));
       const e=4*mm*(1-mm);
