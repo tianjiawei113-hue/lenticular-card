@@ -5,3 +5,9 @@
 *_备份.html
 *.bak
 _*
+
+# 构建/依赖产物（不进库）
+node_modules/
+build/
+.npm-cache/
+package-lock.json

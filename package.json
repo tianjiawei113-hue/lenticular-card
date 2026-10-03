@@ -1,0 +1,28 @@
+{
+  "name": "lenticular-card",
+  "version": "1.0.0",
+  "description": "变画卡工坊 / 光栅卡模拟（单页 + raindrop-fx 雨滴引擎）",
+  "main": "index.js",
+  "scripts": {
+    "check": "node tools/extract.js && eslint build/app.js",
+    "extract": "node tools/extract.js",
+    "lint": "eslint build/app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tianjiawei113-hue/lenticular-card.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/tianjiawei113-hue/lenticular-card/issues"
+  },
+  "homepage": "https://github.com/tianjiawei113-hue/lenticular-card#readme",
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0"
+  },
+  "private": true
+}

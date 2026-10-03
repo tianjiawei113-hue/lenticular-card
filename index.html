@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v26 · 修 flowFill 报错 + 恢复换图</em></h1>
+<h1>变 画 卡 工 坊 <em>v27 · 自查：装了 lint，修掉水波样式缺失的 FF/fsin/FW</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -155,7 +155,7 @@ const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 window.__errs=[];
 (function(){
   function show(m){ try{ window.__errs.push(m); var b=document.getElementById('errbox');
-    if(b){ b.style.display='block'; b.textContent=window.__errs.slice(-3).join('\n'); } }catch(e){} }
+    if(b){ b.style.display='block'; b.textContent=window.__errs.slice(-3).join('\n'); } }catch{} }
   addEventListener('error', function(e){
     if(e && e.message) show(e.message+'  @'+String(e.filename||'').split('/').pop()+':'+(e.lineno||'?')+':'+(e.colno||'?'));
     else show('资源加载失败：'+((e&&e.target&&(e.target.src||e.target.href))||'未知'));
@@ -279,8 +279,6 @@ function renderTo(g, W, H){
   }
 }
 // ===== 「溶解流动」引擎：水波干涉场（径向涟漪 + 两道斜波 + 噪声扰动）→ 阈值溶解 =====
-function smoothstep(e0,e1,x){ const u=Math.max(0,Math.min(1,(x-e0)/(e1-e0))); return u*u*(3-2*u); }
-function fract01(x){ return x-Math.floor(x); }
 const NT=256, PER=6, TWO_PI=Math.PI*2;
 const NOISE=(function(){
   const t=new Float32Array(NT*NT);
@@ -351,8 +349,6 @@ const DROPS=(function(){
   }
   return arr;
 })();
-const CIRC=(function(){ const c=new Float32Array(26), s=new Float32Array(26);
-  for(let i=0;i<26;i++){ const a=i/26*Math.PI*2; c[i]=Math.cos(a); s[i]=Math.sin(a); } return [c,s]; })();
 // 水珠的路径（解析式，保证整圈可无缝循环）：竖直下滑 + 轻微左右摆。
 // 时间被轻微扭曲 → 滑动是「停停走走」的（RainyDay.js 的 NON_LINEAR 重力就是这个手感）。
 function dropPos(d,u,W,H){
@@ -370,7 +366,7 @@ const SPEC=(function(){
   x.fillStyle=g; x.fillRect(0,0,S,S);
   return c;
 })();
-let rainSrc=null, rainSrcBlur=null, rainSrcKey='', rainBase=null, rainBaseKey='';
+let rainSrc=null, rainSrcKey='', rainBase=null, rainBaseKey='';
 function rainSource(W,H){
   const key=W+'x'+H+'_'+(imgB?imgB.width+'x'+imgB.height:'');
   if(rainSrc && rainSrcKey===key) return rainSrc;      // 水珠里是「清楚」的那份
@@ -381,39 +377,10 @@ function rainSource(W,H){
   rainSrc=c; rainSrcKey=key;
   return c;
 }
-function capsulePath(g,x,y,w,h,r){
-  g.beginPath();
-  g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.arc(x+w-r,y+r,r,-Math.PI/2,0);
-  g.lineTo(x+w,y+h-r); g.arc(x+w-r,y+h-r,r,0,Math.PI/2);
-  g.lineTo(x+r,y+h); g.arc(x+r,y+h-r,r,Math.PI/2,Math.PI);
-  g.lineTo(x,y+r); g.arc(x+r,y+r,r,Math.PI,Math.PI*1.5);
-  g.closePath();
-}
 // 水珠内的折射：以 (cx,cy) 为中心、放大 m 倍显示下层（源画布已按 K 放大，故源矩形取 目标宽 × K/m）
 function dropRefract(g,src,cx,cy,w,h,K,m){
   const sw=w*K/m, sh=h*K/m;
   g.drawImage(src, cx*K-sw/2, cy*K-sh/2, sw, sh, cx-w/2, cy-h/2, w, h);
-}
-// 水痕：细窄一条，折射很弱（m≈1.05），顶端渐隐
-// 水痕：比珠子细得多的湿痕（下宽上尖），顶端渐隐。真实玻璃上滑过的痕是细水线，不是和珠子一样粗的胶囊。
-function drawStreak(g,src,cx,yBot,yTop,r,K){
-  const wBot=Math.max(0.8,r*0.34), wTop=Math.max(0.5,r*0.07), h=yBot-yTop;
-  if(h<=1) return;
-  g.save();
-  g.beginPath();
-  g.moveTo(cx-wBot/2,yBot);
-  g.quadraticCurveTo(cx-wTop*1.15,yBot-h*0.5, cx-wTop/2,yTop);
-  g.lineTo(cx+wTop/2,yTop);
-  g.quadraticCurveTo(cx+wTop*1.15,yBot-h*0.5, cx+wBot/2,yBot);
-  g.closePath();
-  g.clip();
-  dropRefract(g,src,cx,(yBot+yTop)/2,wBot,h,K,1.03);
-  const gr=g.createLinearGradient(0,yTop,0,yBot);
-  gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(0.7,'rgba(0,0,0,0.3)'); gr.addColorStop(1,'rgba(0,0,0,0)');
-  g.globalCompositeOperation='destination-out';
-  g.fillStyle=gr; g.fillRect(cx-wBot,yTop,wBot*2,h);
-  g.globalCompositeOperation='source-over';
-  g.restore();
 }
 // 收集水珠并合并（大的吞小的，面积守恒）。大小只跟时间有关 → 和倾斜进度无关。
 const _dl=[], rainKept=[];
@@ -509,6 +476,33 @@ function drawRain(g,W,H,u){
 let fcolA=null, fcolB=null, fcolT=null, frowA=null, frowB=null;
 let flowFill=null, flowGlow=null, flowLayer=null;   // 之前拼接代码时被误删了声明，导致水波样式报 flowFill is not defined
 function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } return c; }
+// ===== 水波场要用到的三样（之前拼接代码时被误删，eslint 抓出来的）=====
+const FW=0.75;                                   // 噪声扰动权重
+const SINT=(function(){ const t=new Float32Array(4096); for(let i=0;i<4096;i++) t[i]=Math.sin(i/4096*TWO_PI); return t; })();
+const SIN_K=4096/TWO_PI, SIN_BIAS=8388608;       // 快速正弦：查表 + 位与取模（逐像素算三路波，Math.sin 太贵）
+function fsin(x){ return SINT[((x*SIN_K+SIN_BIAS)|0)&4095]; }
+// 波场分布拉平：采样一遍波场的取值分布，做出「值 → 均匀分位」查表，
+// 这样即使形状是水波，「露出 B 的面积」依然等于过渡进度 a
+const FF=(function(){
+  const BINS=1024, N=80000, rg=3.0;
+  const vals=new Float32Array(N);
+  let mn=1e9, mx=-1e9;
+  for(let i=0;i<N;i++){
+    const px=Math.random()*2-0.5, py=Math.random()*1.7-0.35;
+    const ph=Math.random()*TWO_PI, un=Math.random()-0.5;
+    const rx=px-0.5, ry=py-0.5;
+    const v=0.55*Math.sin(rg*TWO_PI*Math.sqrt(rx*rx+ry*ry)-ph)
+           +0.25*Math.sin(rg*TWO_PI*1.55*(0.86*px+0.51*py)-ph*0.7)
+           +0.20*Math.sin(rg*TWO_PI*1.25*(-0.51*px+0.86*py)+ph*0.55)
+           +FW*un;
+    vals[i]=v; if(v<mn)mn=v; if(v>mx)mx=v;
+  }
+  const sc=(BINS-1)/(mx-mn), hist=new Uint32Array(BINS);
+  for(let i=0;i<N;i++){ let q=((vals[i]-mn)*sc)|0; if(q<0)q=0; else if(q>=BINS)q=BINS-1; hist[q]++; }
+  const lut=new Uint8Array(BINS); let acc=0;
+  for(let i=0;i<BINS;i++){ acc+=hist[i]; lut[i]=Math.round(acc/N*255); }
+  return {lut, mn, sc};
+})();
 // u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
 function renderFlow(g,W,H,u){
   const a=ratioB();
@@ -599,7 +593,7 @@ function flowPhase(){
 // 它自己管水珠的生成/合并/拖尾/折射/雾气，我们只负责：给它一块画布、喂它「背后那张图」、
 // 并在倾斜过半时把背后的图换成另一张 —— 水珠里的折射会自动跟着变。
 const rcv=document.getElementById('rcv');
-let rfx=null, rfxScene='', rfxSize='', rfxPending=false, rfxRunning=false, sceneCv=null, rfxTried=false, imgVer=0;
+let rfx=null, rfxScene='', rfxSize='', rfxPending=false, rfxRunning=false, sceneCv=null, imgVer=0;
 const errBox=document.getElementById('errbox'), errLines=[];
 function errShow(msg){
   errLines.push(String(msg).slice(0,260)); if(errLines.length>3) errLines.shift();
@@ -612,7 +606,7 @@ addEventListener('error', function(e){
   else errShow('资源加载失败：'+((e&&e.target&&(e.target.src||e.target.href))||'未知'));
 }, true);
 addEventListener('unhandledrejection', function(e){ errShow('Promise 未处理：'+((e.reason&&(e.reason.message||e.reason))||'?')); });
-function glInfo(){ try{ const c=document.createElement('canvas'); return c.getContext('webgl2')?'WebGL2 可用':(c.getContext('webgl')?'只有 WebGL1（本引擎需要 WebGL2）':'没有 WebGL'); }catch(e){ return 'WebGL 探测失败'; } }
+function glInfo(){ try{ const c=document.createElement('canvas'); return c.getContext('webgl2')?'WebGL2 可用':(c.getContext('webgl')?'只有 WebGL1（本引擎需要 WebGL2）':'没有 WebGL'); }catch{ return 'WebGL 探测失败'; } }
 function sceneCanvas(which){
   const W=Math.max(64,Math.round(outW)), H=Math.max(2,Math.round(outH));
   sceneCv=flowCv(sceneCv,W,H);
@@ -645,10 +639,10 @@ async function rfxStart(W,H){
     rfx.resize(W,H); rfxSize=W+'x'+H;
   }catch(e){ errShow('雨滴引擎启动失败：'+((e&&e.message)||e)+'  ['+glInfo()+']'); }
 }
-function rfxStop(){ if(rfx && rfxRunning){ try{ rfx.stop(); }catch(e){} rfxRunning=false; } }
+function rfxStop(){ if(rfx && rfxRunning){ try{ rfx.stop(); }catch{} rfxRunning=false; } }
 function rfxTick(a,W,H){
   if(!rfxRunning){ rfxStart(W,H); return; }
-  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch(e){} }
+  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} }
   if(rfxPending || (!imgA && !imgB)) return;
   // 有第二张图时，倾斜过半就换背后的图（水珠折射自动跟随）；只有一张就一直用它
   const want=(imgB && a>=0.5) ? 'B' : 'A';
@@ -741,7 +735,7 @@ document.getElementById('Rbl').oninput=function(){          // 湿玻璃清晰�
   const v=Number(this.value);
   document.getElementById('Rblv').textContent=v;
   // 底图固定用最清晰档(1)，靠「雾有多糊」拉开差距：差得越多，擦痕越清楚
-  if(rfx){ try{ rfx.options.backgroundBlurSteps=1; rfx.options.mistBlurStep=1+v; }catch(e){} rfxScene=''; if(MODE==='flow'&&FSTYLE==='rain') rfxTick(ratioB(),dispW,dispH); }
+  if(rfx){ try{ rfx.options.backgroundBlurSteps=1; rfx.options.mistBlurStep=1+v; }catch{} rfxScene=''; if(MODE==='flow'&&FSTYLE==='rain') rfxTick(ratioB(),dispW,dispH); }
 };
 
 // 导出：按当前输出精度出底图，图案与预览完全一致（可印真卡）
