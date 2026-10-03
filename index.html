@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v9 · 溶解流动改为水波</em></h1>
+<h1>变 画 卡 工 坊 <em>v10 · 溶解样式：水波 / 雨滴</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -105,6 +105,12 @@
     </select>
   </label>
   <label>透镜宽度 <input id="L" type="range" min="2" max="16" step="1" value="4"><b id="Lv">4px</b></label>
+  <label>溶解样式
+    <select id="Fsty">
+      <option value="wave" selected>水波</option>
+      <option value="rain">雨滴</option>
+    </select>
+  </label>
   <label>波纹大小 <input id="Fsc" type="range" min="0.5" max="8" step="0.5" value="3.5"><b id="Fscv">3.5</b></label>
   <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="20"><b id="Fsov">20</b></label>
   <label>流动速度 <input id="Ffl" type="range" min="0" max="100" step="1" value="35"><b id="Fflv">35</b></label>
@@ -144,7 +150,8 @@ const angEl=document.getElementById('ang'), raEl=document.getElementById('ra'), 
 const GOLD=0.6180339887498949, MAX=26;
 let imgA=null, imgB=null;
 let t=0, GAIN=1.0, DEAD=0.08, PITCH=1, LENS=4, MODE='lens';
-let FSC=4.5, FSO=12, FFL=35, FGL=24;      // 溶解流动：尺度 / 边缘柔度 / 流速 / 边缘发光
+let FSC=3.5, FSO=20, FFL=35, FGL=24;      // 溶解流动：尺度 / 边缘柔度 / 流速 / 边缘发光
+let FSTYLE='wave';                        // 溶解样式：wave 水波 / rain 雨滴
 let outW=900, outH=1350;                 // 输出（逻辑）分辨率：与源图相关
 let dispW=900, dispH=1350;               // 屏幕显示尺寸（性能用，封顶）
 let dragging=false, sx0=0, st0=0, auto=false;
@@ -287,16 +294,54 @@ const NOISE=(function(){
   for(let i=0;i<u8.length;i++) u8[i]=lut[u8[i]];
   return u8;
 })();
-function nz(u,v){                              // 双线性采样 + 环绕
+function sampleTile(T,u,v){                    // 双线性采样 + 环绕
   const x=u*NT, y=v*NT;
   // 先加 2^19（是 256 的整数倍，不影响环绕结果）把坐标抬成正数，这样 |0 就等价于 floor
   const BIAS=524288;
   const xi=((x+BIAS)|0)-BIAS, yi=((y+BIAS)|0)-BIAS, xf=x-xi, yf=y-yi;
   const x0=xi&255, y0=yi&255, x1=(x0+1)&255, y1=(y0+1)&255;   // 256 是 2 的幂，按位与即环绕
   const r0=y0<<8, r1=y1<<8;
-  const a=NOISE[r0+x0], b=NOISE[r0+x1], c=NOISE[r1+x0], d=NOISE[r1+x1];
+  const a=T[r0+x0], b=T[r0+x1], c=T[r1+x0], d=T[r1+x1];
   return ((a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf)*0.00392156862745098;
 }
+function nz(u,v){ return sampleTile(NOISE,u,v); }
+// 雨滴贴图：周期化的 Voronoi 距离场（纵向拉长 → 水滴形状），同样做直方图均衡，
+// 于是「采样值」在 0..1 上均匀，露出 B 的面积依旧等于过渡进度。
+const RAIN=(function(){
+  const K=8, t=new Float32Array(NT*NT);
+  const rh=(i,j)=>{ let n=(i*374761393+j*668265263)|0; n=(n^(n>>>13))*1274126177|0; return ((n^(n>>>16))>>>0)/4294967296; };
+  const jx=new Float32Array(K*K), jy=new Float32Array(K*K);
+  for(let j=0;j<K;j++) for(let i=0;i<K;i++){
+    jx[j*K+i]=0.14+0.72*rh(i,j);
+    jy[j*K+i]=0.14+0.72*rh(i+7919,j+104729);
+  }
+  // 只看所在格的 3×3 邻域（种子索引按 K 取模 → 整块贴图无缝），比全量遍历快好几倍
+  for(let y=0;y<NT;y++) for(let x=0;x<NT;x++){
+    const fx=x/NT*K, fy=y/NT*K;
+    const cx=Math.floor(fx), cy=Math.floor(fy);
+    let best=1e18;
+    for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){
+      const wx=((cx+i)%K+K)%K, wy=((cy+j)%K+K)%K, id=wy*K+wx;
+      const dx=x/NT-(cx+i+jx[id])/K, dy=(y/NT-(cy+j+jy[id])/K)*1.32;   // 纵向拉长，像挂在玻璃上的水珠
+      const d=dx*dx+dy*dy;
+      if(d<best) best=d;
+    }
+    t[y*NT+x]=Math.sqrt(best);
+  }
+  let mn=1e9,mx=-1e9;
+  for(let i=0;i<t.length;i++){ if(t[i]<mn)mn=t[i]; if(t[i]>mx)mx=t[i]; }
+  const u8=new Uint8Array(t.length);
+  for(let i=0;i<t.length;i++) u8[i]=Math.round((t[i]-mn)/(mx-mn)*255);
+  const hist=new Uint32Array(256), cdf=new Uint32Array(256);
+  for(let i=0;i<u8.length;i++) hist[u8[i]]++;
+  let acc=0;
+  for(let i=0;i<256;i++){ acc+=hist[i]; cdf[i]=acc; }
+  const lut=new Uint8Array(256);
+  for(let i=0;i<256;i++) lut[i]=Math.round(cdf[i]/u8.length*255);
+  for(let i=0;i<u8.length;i++) u8[i]=lut[u8[i]];
+  return u8;
+})();
+function nzr(u,v){ return sampleTile(RAIN,u,v); }
 // 波场分布拉平：采样一遍波场的取值分布，做出「值 → 均匀分位」查表。
 // 有了它，即使形状是水波，「露出 B 的面积」依然等于过渡进度 a。
 const FW=0.75;                                   // 噪声扰动权重
@@ -305,7 +350,7 @@ const SINT=(function(){ const t=new Float32Array(4096); for(let i=0;i<4096;i++) 
 const SIN_K=4096/TWO_PI, SIN_BIAS=8388608;       // 2^23，是 4096 的整数倍
 function fsin(x){ return SINT[((x*SIN_K+SIN_BIAS)|0)&4095]; }
 const FF=(function(){
-  const BINS=1024, N=150000, rg=3.0;
+  const BINS=1024, N=80000, rg=3.0;
   const vals=new Float32Array(N);
   let mn=1e9, mx=-1e9;
   for(let i=0;i<N;i++){
@@ -360,20 +405,28 @@ function renderFlow(g,W,H,u){
     frowB[y]=kr*1.25*0.86*py;
   }
   const noiseK=0.55/mw, nx0=Math.sin(ph0)*0.20+t*0.30, ny0=Math.cos(ph0)*0.12;
+  const rain=(FSTYLE==='rain');
+  const rainK=(0.9+FSC*0.32)/mw, rainX=Math.sin(ph0)*0.06+t*0.18, rainY=-u;  // 雨滴：整片玻璃往下淌
   const F=fi.data, G=gi.data;
   const fmn=FF.mn, fsc=FF.sc, flut=FF.lut;
   let p=0;
   for(let y=0;y<mh;y++){
     const ry=y/mw-sy, ry2=ry*ry;
     const nb=frowA[y], nc=frowB[y], nyv=y*noiseK+ny0;
+    const ryv=y*rainK+rainY;
     for(let x=0;x<mw;x++,p+=4){
-      const rx=x/mw-sx;
-      const f=0.55*fsin(kr*Math.sqrt(rx*rx+ry2)-phA)
-             +0.25*fsin(fcolA[x]+nb)
-             +0.20*fsin(fcolB[x]+nc)
-             +FW*(nz(x*noiseK+nx0, nyv)-0.5);
-      let q=((f-fmn)*fsc)|0; if(q<0)q=0; else if(q>1023)q=1023;
-      const v=flut[q]*0.00392156862745098+fcolT[x];
+      let v;
+      if(rain){
+        v=nzr(x*rainK+rainX, ryv)+fcolT[x];
+      }else{
+        const rx=x/mw-sx;
+        const f=0.55*fsin(kr*Math.sqrt(rx*rx+ry2)-phA)
+               +0.25*fsin(fcolA[x]+nb)
+               +0.20*fsin(fcolB[x]+nc)
+               +FW*(nz(x*noiseK+nx0, nyv)-0.5);
+        let q=((f-fmn)*fsc)|0; if(q<0)q=0; else if(q>1023)q=1023;
+        v=flut[q]*0.00392156862745098+fcolT[x];
+      }
       const d=(v-thr+soft)*inv2s;
       const mm=d<=0?0:(d>=1?1:d*d*(3-2*d));
       const e=4*mm*(1-mm);
@@ -383,12 +436,16 @@ function renderFlow(g,W,H,u){
   }
   fctx.putImageData(fi,0,0);
   gctx.putImageData(gi,0,0);
+  // 关键：B 图层按高分辨率画，低分辨率蒙版只当 alpha 用。
+  // 之前图层也是蒙版分辨率，放大回全尺寸后整片发糊——「侧看糊」就是这个原因。
+  const lw=Math.min(1600,Math.max(64,Math.round(W))), lh=Math.max(2,Math.round(lw*H/W));
+  flowLayer=flowCv(flowLayer,lw,lh);
   const ictx=flowLayer.getContext('2d');
   ictx.globalCompositeOperation='source-over';
-  ictx.clearRect(0,0,mw,mh);
-  ictx.drawImage(imgB, rB[0],rB[1],rB[2],rB[3], 0,0,mw,mh);
+  ictx.clearRect(0,0,lw,lh);
+  ictx.drawImage(imgB, rB[0],rB[1],rB[2],rB[3], 0,0,lw,lh);
   ictx.globalCompositeOperation='destination-in';
-  ictx.drawImage(flowFill,0,0);
+  ictx.drawImage(flowFill,0,0,lw,lh);          // 蒙版放大 → 边软，但图像本身是清晰的
   ictx.globalCompositeOperation='source-over';
   g.globalAlpha=1;
   g.drawImage(flowLayer,0,0,W,H);
@@ -471,6 +528,7 @@ function syncMode(){
 document.getElementById('mode').onchange=function(){ MODE=this.value; syncMode(); draw(); };
 document.getElementById('L').oninput=function(){ LENS=Number(this.value); document.getElementById('Lv').textContent=this.value+'px'; draw(); };
 document.getElementById('Fsc').oninput=function(){ FSC=Number(this.value); document.getElementById('Fscv').textContent=this.value; draw(); };
+document.getElementById('Fsty').onchange=function(){ FSTYLE=this.value; draw(); };
 document.getElementById('Fso').oninput=function(){ FSO=Number(this.value); document.getElementById('Fsov').textContent=this.value; draw(); };
 document.getElementById('Ffl').oninput=function(){ FFL=Number(this.value); document.getElementById('Fflv').textContent=this.value; draw(); };
 document.getElementById('Fgl').oninput=function(){ FGL=Number(this.value); document.getElementById('Fglv').textContent=this.value; draw(); };
