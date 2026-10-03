@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v25 · 修背景加载顺序（黑屏真因）</em></h1>
+<h1>变 画 卡 工 坊 <em>v26 · 修 flowFill 报错 + 恢复换图</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -507,6 +507,7 @@ function drawRain(g,W,H,u){
   }
 }
 let fcolA=null, fcolB=null, fcolT=null, frowA=null, frowB=null;
+let flowFill=null, flowGlow=null, flowLayer=null;   // 之前拼接代码时被误删了声明，导致水波样式报 flowFill is not defined
 function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } return c; }
 // u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
 function renderFlow(g,W,H,u){
@@ -598,7 +599,7 @@ function flowPhase(){
 // 它自己管水珠的生成/合并/拖尾/折射/雾气，我们只负责：给它一块画布、喂它「背后那张图」、
 // 并在倾斜过半时把背后的图换成另一张 —— 水珠里的折射会自动跟着变。
 const rcv=document.getElementById('rcv');
-let rfx=null, rfxScene='', rfxSize='', rfxPending=false, rfxRunning=false, sceneCv=null, rfxTried=false;
+let rfx=null, rfxScene='', rfxSize='', rfxPending=false, rfxRunning=false, sceneCv=null, rfxTried=false, imgVer=0;
 const errBox=document.getElementById('errbox'), errLines=[];
 function errShow(msg){
   errLines.push(String(msg).slice(0,260)); if(errLines.length>3) errLines.shift();
@@ -638,7 +639,7 @@ async function rfxStart(W,H){
         // 关键：底图用最清晰的那档(1，0 档有 bug 会黑屏)，雾用 4 档 —— 拉开 3 级差(分辨率差 8 倍)，
         // 水珠擦掉雾之后露出的就是明显清晰的画面
         backgroundBlurSteps:1, mist:true, mistTime:1.2, mistBlurStep:4 });
-      rfxScene = c0 ? 'A' : '';
+      rfxScene = c0 ? ('A|'+imgVer+'|'+W+'x'+H) : '';
     }
     if(!rfxRunning){ await rfx.start(); rfxRunning=true; }
     rfx.resize(W,H); rfxSize=W+'x'+H;
@@ -649,11 +650,13 @@ function rfxTick(a,W,H){
   if(!rfxRunning){ rfxStart(W,H); return; }
   if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch(e){} }
   if(rfxPending || (!imgA && !imgB)) return;
-  const want='A';                       // 只用一张图，不再随倾斜切换
-  if(rfxScene===want) return;
+  // 有第二张图时，倾斜过半就换背后的图（水珠折射自动跟随）；只有一张就一直用它
+  const want=(imgB && a>=0.5) ? 'B' : 'A';
+  const key=want+'|'+imgVer+'|'+W+'x'+H;
+  if(rfxScene===key) return;
   const c=sceneCanvas(want); if(!c) return;
   rfxPending=true;
-  rfx.setBackground(c).then(function(){ rfxScene=want; }, function(){ errShow('背景设置失败'); }).then(function(){ rfxPending=false; });
+  rfx.setBackground(c).then(function(){ rfxScene=key; }, function(){ errShow('背景设置失败'); }).then(function(){ rfxPending=false; });
 }
 function draw(){
   const rain=(MODE==='flow' && FSTYLE==='rain' && typeof RaindropFX!=='undefined');
@@ -681,6 +684,7 @@ function loadFile(file, which){
   im.onload=()=>{
     if(which==='A'){ imgA=im; document.getElementById('thumbA').src=im.src; }
     else { imgB=im; document.getElementById('thumbB').src=im.src; }
+    imgVer++;                                    // 换图后要让雨滴的背景也跟着换
     drop.style.display=(imgA&&imgB)?'none':'flex';
     fit();
   };
