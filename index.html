@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v20 · 修雨滴引擎启动报错</em></h1>
+<h1>变 画 卡 工 坊 <em>v21 · 修雨滴黑屏（调用链断裂）</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -652,10 +652,14 @@ function draw(){
   const rain=(MODE==='flow' && FSTYLE==='rain' && typeof RaindropFX!=='undefined');
   cv.style.display = rain?'none':'block';
   rcv.style.display = rain?'block':'none';
-  if(!rain) rfxStop();
-  ctx.clearRect(0,0,dispW,dispH);
-  if(MODE==='flow') flowU=flowPhase();
-  if(!rain) renderTo(ctx, dispW, dispH);
+  if(rain){
+    rfxTick(ratioB(), dispW, dispH);            // 雨滴走 WebGL 层：这里必须直接调，不能省
+  }else{
+    rfxStop();
+    ctx.clearRect(0,0,dispW,dispH);
+    if(MODE==='flow') flowU=flowPhase();
+    renderTo(ctx, dispW, dispH);                // （renderFlow 里的雨滴分支只给兜底/GIF 用）
+  }
   const a=ratioB(), ang=t*MAX, at=Math.abs(t);
   angEl.textContent=(Math.abs(ang)<0.5?0:ang).toFixed(0)+'\u00b0';
   raEl.textContent=Math.round((1-a)*100)+'%'; rbEl.textContent=Math.round(a*100)+'%';
