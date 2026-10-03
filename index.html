@@ -333,10 +333,12 @@ const DROPS=(function(){
 })();
 const CIRC=(function(){ const c=new Float32Array(26), s=new Float32Array(26);
   for(let i=0;i<26;i++){ const a=i/26*Math.PI*2; c[i]=Math.cos(a); s[i]=Math.sin(a); } return [c,s]; })();
-// 水珠的路径（解析式，保证整圈可无缝循环）：竖直下滑 + 轻微左右摆
+// 水珠的路径（解析式，保证整圈可无缝循环）：竖直下滑 + 轻微左右摆。
+// 时间被轻微扭曲 → 滑动是「停停走走」的（RainyDay.js 的 NON_LINEAR 重力就是这个手感）。
 function dropPos(d,u,W,H){
-  return [ d.x*W + Math.sin(TWO_PI*(u*2+d.wob))*d.amp*W,
-           ((d.y+u*d.speed)%1)*H ];
+  const us=u+0.055*Math.sin(TWO_PI*(u*3+d.wob+0.37));
+  return [ d.x*W + Math.sin(TWO_PI*(us*2+d.wob))*d.amp*W,
+           ((d.y+us*d.speed)%1)*H ];
 }
 // 镜面高光：一块软斑（不是一个圆环，所以不会显得"太圆"）
 const SPEC=(function(){
@@ -361,7 +363,7 @@ function rainSource(W,H){
   const bx=rainSrcBlur.getContext('2d');
   bx.globalCompositeOperation='source-over';
   bx.clearRect(0,0,c.width,c.height);
-  bx.filter='blur('+Math.max(0.6,W*0.0026).toFixed(2)+'px)';
+  bx.filter='blur('+Math.max(0.8,W*0.0035).toFixed(2)+'px)';
   bx.drawImage(c,0,0);
   bx.filter='none';
   rainSrc=c; rainSrcKey=key;
@@ -452,9 +454,19 @@ function drawRain(g,W,H,u){
         px=p[0]; py=p[1];
       }
     }
+    // 折射分两层画：珠心接近原样，外面一圈强放大。
+    // 这样边缘会把周围景物"压"进来 —— 就是真实水珠的桶形畸变（raindrop-fx 用逐像素法线做的效果）
+    const m0=K*(0.92+0.30*Math.min(1,r/(W*0.045)));
     g.save();
     g.beginPath(); g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2); g.clip();
-    dropRefract(g,src,it.x,it.y,r*2,r*2*d.asp,K,K*(0.92+0.30*Math.min(1,r/(W*0.045))));   // 珠子越大，放大越强
+    dropRefract(g,src,it.x,it.y,r*2,r*2*d.asp,K,m0);
+    g.restore();
+    g.save();
+    g.beginPath();
+    g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2,false);
+    g.ellipse(it.x,it.y,r*0.62,r*d.asp*0.62,0,0,Math.PI*2,true);      // 反向弧挖洞 → 环形
+    g.clip();
+    dropRefract(g,src,it.x,it.y,r*2,r*2*d.asp,K,m0*1.55);
     g.restore();
     g.save();
     g.beginPath(); g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2);
