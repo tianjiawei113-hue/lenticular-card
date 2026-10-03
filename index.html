@@ -106,7 +106,7 @@
   </label>
   <label>透镜宽度 <input id="L" type="range" min="2" max="16" step="1" value="4"><b id="Lv">4px</b></label>
   <label>溶解尺度 <input id="Fsc" type="range" min="1" max="14" step="0.5" value="4.5"><b id="Fscv">4.5</b></label>
-  <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="12"><b id="Fsov">12</b></label>
+  <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="20"><b id="Fsov">20</b></label>
   <label>流动速度 <input id="Ffl" type="range" min="0" max="100" step="1" value="35"><b id="Fflv">35</b></label>
   <label>边缘发光 <input id="Fgl" type="range" min="0" max="70" step="1" value="24"><b id="Fglv">24</b></label>
 </div>
@@ -264,9 +264,15 @@ const NOISE=(function(){
     const a=hash(xi,yi), b=hash(xi+1,yi), c=hash(xi,yi+1), d=hash(xi+1,yi+1);
     return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
   };
+  // 低频为主（0.72/0.22/0.06）：保证形状是「整块的」而不是一堆碎点
+  const fn=(x,y)=>vn(x,y)*0.72+vn(x*2.03+5.2,y*2.03+1.3)*0.22+vn(x*4.01+9.1,y*4.01+3.7)*0.06;
   for(let y=0;y<NT;y++) for(let x=0;x<NT;x++){
-    const fx=x/NT*6, fy=y/NT*6;
-    t[y*NT+x]=vn(fx,fy)*0.55+vn(fx*2.1+13.7,fy*2.1+7.3)*0.3+vn(fx*4.3+31.1,fy*4.3+19.7)*0.15;
+    // 域扭曲（domain warping）：先用低频噪声算出偏移向量，再拿它去扰动采样点。
+    // 这一步是「液体/墨迹」质感的关键——没有它就是一团团圆乎乎的云朵块。
+    const fx=x/NT*5, fy=y/NT*5;
+    const wx=fn(fx*0.7+11.3,fy*0.7+4.1)-0.5;
+    const wy=fn(fx*0.7+27.7,fy*0.7+19.3)-0.5;
+    t[y*NT+x]=fn(fx+1.6*wx, fy+1.6*wy);
   }
   let mn=1e9,mx=-1e9;
   for(let i=0;i<t.length;i++){ if(t[i]<mn)mn=t[i]; if(t[i]>mx)mx=t[i]; }
@@ -292,7 +298,7 @@ function nz(u,v){                              // 双线性采样 + 环绕
   const a=NOISE[r0+x0], b=NOISE[r0+x1], c=NOISE[r1+x0], d=NOISE[r1+x1];
   return ((a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf)*0.00392156862745098;
 }
-let flowFill=null, flowGlow=null, flowLayer=null, rowSh=null;
+let flowFill=null, flowGlow=null, flowLayer=null, rowSh=null, colSh=null, colBias=null;
 function flowCv(c,w,h){ if(!c) c=document.createElement('canvas'); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } return c; }
 // u：流动相位 0..1（一整圈）。0 时画面静止不动，只是溶解形状随倾斜变化
 function renderFlow(g,W,H,u){
@@ -303,6 +309,8 @@ function renderFlow(g,W,H,u){
   const mw=Math.max(24,Math.min(200,Math.round(W/3))), mh=Math.max(2,Math.round(mw*H/W));
   flowFill=flowCv(flowFill,mw,mh); flowGlow=flowCv(flowGlow,mw,mh); flowLayer=flowCv(flowLayer,mw,mh);
   if(!rowSh || rowSh.length<mh) rowSh=new Float32Array(mh);
+  if(!colSh || colSh.length<mw) colSh=new Float32Array(mw);
+  if(!colBias || colBias.length<mw) colBias=new Float32Array(mw);
   const fctx=flowFill.getContext('2d'), gctx=flowGlow.getContext('2d');
   const fi=fctx.createImageData(mw,mh), gi=gctx.createImageData(mw,mh);
   const thr=1-a;                                // 阈值：a 越大，露出 B 的面积越大
@@ -311,19 +319,25 @@ function renderFlow(g,W,H,u){
   const ang=u*Math.PI*2;
   const dx0=Math.sin(ang)*0.9 + t*0.85;         // 环流 + 跟着倾斜方向走
   const dy0=Math.cos(ang)*0.45;
-  const ph2=ang*2;
-  for(let y=0;y<mh;y++) rowSh[y]=Math.sin((y/mw)*cells*0.7+ph2)*0.55;   // 逐行错位，看着像在流
+  // 三张每帧只算一次的查找表：把二维扰动降到「每像素多读一个数组」
+  for(let y=0;y<mh;y++) rowSh[y]=Math.sin((y/mw)*cells*1.15+ang)*0.34;      // 行错位（横向剪切）
+  for(let x=0;x<mw;x++) colSh[x]=Math.sin((x/mw)*cells*1.35+ang*1.7)*0.30;  // 列错位（纵向剪切）
+  const bias=t*0.30;                                                        // 顺着倾斜方向：溶解先从那一侧涌进来
+  for(let x=0;x<mw;x++) colBias[x]=bias*(x/mw-0.5);
+  const inv2s=1/(2*soft);
   const F=fi.data, G=gi.data;
   const kx=cells/6/mw;                          // 像素 → 噪声贴图单位
+  const AXX=kx*0.62, AYY=kx;                    // 横向压得多一点，形状被拉成横向流动的丝
   let p=0;
   for(let y=0;y<mh;y++){
-    const ny=(y*kx)+dy0;
+    const ny=y*AYY+dy0;
+    const xo=dx0+rowSh[y];
     for(let x=0;x<mw;x++,p+=4){
-      const v=nz(x*kx+dx0+rowSh[y], ny);
-      const d=Math.max(0,Math.min(1,(v-thr+soft)/(2*soft)));   // 归一化后再缓动，负半轴才对
-      const m=d*d*(3-2*d);
-      const e=4*m*(1-m);
-      F[p]=255; F[p+1]=255; F[p+2]=255; F[p+3]=m*255;
+      const v=nz(x*AXX+xo, ny+colSh[x])+colBias[x];
+      const d=(v-thr+soft)*inv2s;                // 归一化后再缓动，负半轴才对
+      const mm=d<=0?0:(d>=1?1:d*d*(3-2*d));
+      const e=4*mm*(1-mm);
+      F[p]=255; F[p+1]=255; F[p+2]=255; F[p+3]=mm*255;
       G[p]=255; G[p+1]=255; G[p+2]=255; G[p+3]=e*255;
     }
   }
