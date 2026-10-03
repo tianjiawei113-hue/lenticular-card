@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v24 · 水痕擦出清晰（读懂引擎后修正）</em></h1>
+<h1>变 画 卡 工 坊 <em>v25 · 修背景加载顺序（黑屏真因）</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -628,15 +628,17 @@ async function rfxStart(W,H){
   try{
     if(!rfx){
       rcv.width=Math.max(64,Math.round(W)); rcv.height=Math.max(2,Math.round(H));   // 建上下文前先把尺寸设好
+      // 背景必须走「构造参数」：setBackground() 内部要用 renderer.assets，
+      // 而 assets 是 start() 里的 loadAssets() 才加载的 —— 在 start() 之前调它必炸（这就是之前黑屏的原因）
+      const c0=sceneCanvas('A') || '';
       rfx=new RaindropFX({ canvas:rcv,
+        background:c0,
         spawnSize:[24,70], spawnInterval:[0.06,0.16], spawnLimit:800,
         slipRate:0.55, motionInterval:[0.4,1.6], xShifting:[-0.04,0.04],
         // 关键：底图用最清晰的那档(1，0 档有 bug 会黑屏)，雾用 4 档 —— 拉开 3 级差(分辨率差 8 倍)，
         // 水珠擦掉雾之后露出的就是明显清晰的画面
         backgroundBlurSteps:1, mist:true, mistTime:1.2, mistBlurStep:4 });
-                                                                             // 水珠/水痕擦过的地方就露出清晰画面
-      const c0=sceneCanvas('A');                    // 先给背景，再启动（顺序反了会报错）
-      if(c0 && !rfxScene){ await rfx.setBackground(c0); rfxScene='A'; }
+      rfxScene = c0 ? 'A' : '';
     }
     if(!rfxRunning){ await rfx.start(); rfxRunning=true; }
     rfx.resize(W,H); rfxSize=W+'x'+H;
