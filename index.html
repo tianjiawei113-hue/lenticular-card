@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v21 · 修雨滴黑屏（调用链断裂）</em></h1>
+<h1>变 画 卡 工 坊 <em>v22 · 雨滴：单图 + 水痕擦出清晰</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -113,7 +113,7 @@
   <label>溶解样式
     <select id="Fsty">
       <option value="wave" selected>水波</option>
-      <option value="rain">雨滴（透镜层 · 与倾斜无关）</option>
+      <option value="rain">雨滴（湿玻璃 · 只用一张图）</option>
     </select>
   </label>
   <label>波纹大小 <input id="Fsc" type="range" min="0.5" max="8" step="0.5" value="3.5"><b id="Fscv">3.5</b></label>
@@ -614,7 +614,8 @@ function glInfo(){ try{ const c=document.createElement('canvas'); return c.getCo
 function sceneCanvas(which){
   const W=Math.max(64,Math.round(outW)), H=Math.max(2,Math.round(outH));
   sceneCv=flowCv(sceneCv,W,H);
-  const x=sceneCv.getContext('2d'), im=(which==='B')?imgB:imgA;
+  // 雨滴模式只用一张图：优先用你选的第一张，没有就用第二张
+  const x=sceneCv.getContext('2d'), im=((which==='B')?imgB:imgA) || imgA || imgB;
   if(!im) return null;
   const r=srcRect(im);
   x.clearRect(0,0,W,H);
@@ -629,7 +630,8 @@ async function rfxStart(W,H){
       rfx=new RaindropFX({ canvas:rcv,
         spawnSize:[24,70], spawnInterval:[0.06,0.16], spawnLimit:800,
         slipRate:0.55, motionInterval:[0.4,1.6], xShifting:[-0.04,0.04],
-        backgroundBlurSteps:3, mist:true, mistTime:1.2, mistBlurStep:4 });
+        backgroundBlurSteps:1, mist:true, mistTime:1.2, mistBlurStep:2 });   // 底图接近清晰，湿感交给雾气：
+                                                                             // 水珠/水痕擦过的地方就露出清晰画面
       const c0=sceneCanvas('A');                    // 先给背景，再启动（顺序反了会报错）
       if(c0 && !rfxScene){ await rfx.setBackground(c0); rfxScene='A'; }
     }
@@ -641,8 +643,8 @@ function rfxStop(){ if(rfx && rfxRunning){ try{ rfx.stop(); }catch(e){} rfxRunni
 function rfxTick(a,W,H){
   if(!rfxRunning){ rfxStart(W,H); return; }
   if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch(e){} }
-  if(rfxPending || !imgA || !imgB) return;
-  const want=(a>=0.5)?'B':'A';
+  if(rfxPending || (!imgA && !imgB)) return;
+  const want='A';                       // 只用一张图，不再随倾斜切换
   if(rfxScene===want) return;
   const c=sceneCanvas(want); if(!c) return;
   rfxPending=true;
