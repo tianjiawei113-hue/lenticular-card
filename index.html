@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v17 · 雨滴：桶形畸变 + 停停走走</em></h1>
+<h1>变 画 卡 工 坊 <em>v18 · 雨滴：湿玻璃底 + 珠内广角小镜</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -309,16 +309,16 @@ function nz(u,v){ return sampleTile(NOISE,u,v); }
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 const DROPS=(function(){
   const rnd=mulberry32(20261003), arr=[];
-  for(let i=0;i<240;i++){
+  for(let i=0;i<320;i++){
     // 分三层（照 Godot 那份雨玻璃 shader 的结构）：静止小珠 / 慢速水痕 / 快速大珠
     const k=rnd();
     const kind = k<0.55 ? 0 : (k<0.86 ? 1 : 2);
     arr.push({
       x:rnd(), y:rnd(),
       kind,
-      r: kind===0 ? 0.004+rnd()*0.010
-       : kind===1 ? 0.006+rnd()*0.014
-       :            0.022+rnd()*0.048,
+      r: kind===0 ? 0.0035+rnd()*0.0085
+       : kind===1 ? 0.005+rnd()*0.013
+       :            0.018+rnd()*0.038,
       speed: kind===0 ? 0 : (kind===1 ? 1 : 2),
       trail: kind===1 ? 4.0+rnd()*6.0 : (kind===2 ? 3.0+rnd()*4.5 : 0),   // 以珠径为单位：真实水痕会拖好几倍
       // 表面张力把水珠拉得很光滑：静止小珠几乎正圆，滑动的大珠是纵向拉长的泪滴
@@ -350,24 +350,16 @@ const SPEC=(function(){
   x.fillStyle=g; x.fillRect(0,0,S,S);
   return c;
 })();
-let rainSrc=null, rainSrcBlur=null, rainSrcKey='';
+let rainSrc=null, rainSrcBlur=null, rainSrcKey='', rainBase=null, rainBaseKey='';
 function rainSource(W,H){
   const key=W+'x'+H+'_'+(imgB?imgB.width+'x'+imgB.height:'');
-  if(rainSrc && rainSrcKey===key) return rainSrcBlur;
+  if(rainSrc && rainSrcKey===key) return rainSrc;      // 水珠里是「清楚」的那份
   const k=1.18, c=flowCv(rainSrc,Math.round(W*k),Math.round(H*k));
   const x=c.getContext('2d'), rB=srcRect(imgB);
   x.clearRect(0,0,c.width,c.height);
   x.drawImage(imgB, rB[0],rB[1],rB[2],rB[3], 0,0,c.width,c.height);
-  // 水膜后面是虚的：再存一份模糊版，水珠/水痕里用它（Godot 那份用 textureLod 做可变模糊）
-  rainSrcBlur=flowCv(rainSrcBlur,c.width,c.height);
-  const bx=rainSrcBlur.getContext('2d');
-  bx.globalCompositeOperation='source-over';
-  bx.clearRect(0,0,c.width,c.height);
-  bx.filter='blur('+Math.max(0.8,W*0.0035).toFixed(2)+'px)';
-  bx.drawImage(c,0,0);
-  bx.filter='none';
   rainSrc=c; rainSrcKey=key;
-  return rainSrcBlur;
+  return c;
 }
 function capsulePath(g,x,y,w,h,r){
   g.beginPath();
@@ -432,8 +424,21 @@ function collectDrops(W,H,u,out){
 // 底图始终是 A；只有水珠里透出 B（折射透镜）。整片不做淡入、不看倾斜进度。
 function drawRain(g,W,H,u){
   const rA=srcRect(imgA), K=1.18;
-  g.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
-  const src=rainSource(W,H);            // 已经是模糊版：水珠里看到的下层是虚的
+  // 底图是「隔着湿玻璃」看的：整张是虚的，只有水珠里才清楚 —— 这是"窗上水珠"的关键
+  const bk=W+'x'+H+'_'+(imgA?imgA.width+'x'+imgA.height:'');
+  if(!rainBase || rainBaseKey!==bk){
+    rainBase=flowCv(rainBase,Math.max(64,W),Math.max(2,H));
+    const bx=rainBase.getContext('2d');
+    bx.globalCompositeOperation='source-over';
+    bx.clearRect(0,0,W,H);
+    bx.filter='blur('+Math.max(1.2,W*0.0055).toFixed(2)+'px)';
+    bx.drawImage(imgA, rA[0],rA[1],rA[2],rA[3], 0,0,W,H);
+    bx.filter='none';
+    rainBaseKey=bk;
+  }
+  g.drawImage(rainBase, 0,0,W,H);
+  g.fillStyle='rgba(120,150,190,0.10)'; g.fillRect(0,0,W,H);   // 玻璃的冷调
+  const src=rainSource(W,H);            // 清楚的下层图：只有水珠里能看清（底图是虚的）
   const kn=collectDrops(W,H,u,rainKept);
   for(let i=0;i<kn;i++){
     const it=rainKept[i], d=it.d, r=it.r;
@@ -454,11 +459,12 @@ function drawRain(g,W,H,u){
         px=p[0]; py=p[1];
       }
     }
-    // 折射分两层画：珠心接近原样，外面一圈强放大。
-    // 这样边缘会把周围景物"压"进来 —— 就是真实水珠的桶形畸变（raindrop-fx 用逐像素法线做的效果）
-    const m0=K*(0.92+0.30*Math.min(1,r/(W*0.045)));
+    // 水珠 = 一颗广角小镜：里面是「缩小 + 倒像」的下层（RainyDay.js 的 reflectionScaledownFactor 就是这个），
+    // 再分两层做桶形畸变：外圈缩得更厉害，把周围景物压进来。
+    const m0=0.88-0.10*Math.min(1,r/(W*0.045));
     g.save();
     g.beginPath(); g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2); g.clip();
+    g.translate(it.x,it.y); g.rotate(Math.PI); g.translate(-it.x,-it.y);   // 倒像
     dropRefract(g,src,it.x,it.y,r*2,r*2*d.asp,K,m0);
     g.restore();
     g.save();
@@ -466,7 +472,8 @@ function drawRain(g,W,H,u){
     g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2,false);
     g.ellipse(it.x,it.y,r*0.62,r*d.asp*0.62,0,0,Math.PI*2,true);      // 反向弧挖洞 → 环形
     g.clip();
-    dropRefract(g,src,it.x,it.y,r*2,r*2*d.asp,K,m0*1.55);
+    g.translate(it.x,it.y); g.rotate(Math.PI); g.translate(-it.x,-it.y);
+    dropRefract(g,src,it.x,it.y,r*2,r*2*d.asp,K,m0*0.62);
     g.restore();
     g.save();
     g.beginPath(); g.ellipse(it.x,it.y,r,r*d.asp,0,0,Math.PI*2);
