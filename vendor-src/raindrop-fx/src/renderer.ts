@@ -110,6 +110,15 @@ class FinalCompose extends MaterialFromShader(new Shader(defaultVert, composeFra
 
     @shaderProp("uPremultiply", "float")       // 【自改】透明底时输出预乘 alpha，避免水珠边缘发亮
     premultiply: number = 0;
+
+    @shaderProp("uCanvasSize", "vec2")         // 【自改】倒影用：画布像素尺寸
+    canvasSize: vec2 = vec2(1, 1);
+
+    @shaderProp("uSizeRef", "float")           // 【自改】倒影用：珠径归一化基准 spawnSize[1]
+    sizeRef: number = 100;
+
+    @shaderProp("uDropInvert", "float")        // 【自改】水珠倒影强度 0~1
+    dropInvert: number = 0;
 }
 
 class RaindropErase extends SimpleTexturedMaterial(new Shader(defaultVert, raindropErase, {
@@ -124,6 +133,13 @@ class RaindropErase extends SimpleTexturedMaterial(new Shader(defaultVert, raind
 
 const MistAccumulate = SimpleTexturedMaterial(new Shader(defaultVert, defaultFrag, {
     blend: [Blending.One, Blending.One]
+}));
+
+// 【自改】把目标颜色乘上源颜色（dst *= srcColor），用来让「细密水珠层」逐帧淡出。
+// 上游那层只增不减（设计成越淋越湿），叠久了就是一层擦不掉的斑点。
+const DropletFade = SimpleTexturedMaterial(new Shader(defaultVert, defaultFrag, {
+    blendRGB: [Blending.Zero, Blending.SrcColor],
+    blendAlpha: [Blending.Zero, Blending.SrcColor],
 }));
 
 class MistBackgroundCompose extends SimpleTexturedMaterial(new Shader(defaultVert, mistBackground, {
@@ -152,6 +168,17 @@ export interface RenderOptions
      * 默认 false，主网页行为完全不变。
      */
     transparentBackground: boolean;
+    /**
+     * 【自改】细密水珠层每秒的保留比例（0~1]。1 = 上游行为（只增不减、越淋越湿）；
+     * 小于 1 时每帧乘 pow(dropletFade, dt) 淡出 → 老水珠慢慢干、新水珠持续落下，
+     * 湿玻璃质感会「实时刷新」，而不是攒成一层擦不掉的斑点。
+     */
+    dropletFade: number;
+    /**
+     * 【自改】水珠倒影强度 0~1：水珠相当于一颗凸透镜，透过去看到的像是倒的。
+     * 0 = 上游行为（不倒影）；1 = 完全倒影，珠子更有立体感。
+     */
+    dropInvert: number;
     /**
      * Background blur steps used for background & raindrop refract image.
      * Value should be integer from 0 to log2(backgroundSize).
@@ -282,6 +309,7 @@ export class RaindropRenderer
     private matrlDroplet = new DropletMaterial();
     private matrlErase = new RaindropErase();
     private matrlMist = new MistAccumulate();
+    private matrlDropletFade = new DropletFade();
     private matrlMistCompose = new MistBackgroundCompose();
 
     private projectionMatrix: mat4;
@@ -428,6 +456,9 @@ export class RaindropRenderer
         // 【自改】透明底时输出「预乘 alpha」（WebGL 画布默认 premultipliedAlpha=true，
         // 不预乘的话水珠边缘的 rgb 会偏亮、出现一圈光晕）
         this.matrlCompose.premultiply = this.options.transparentBackground ? 1 : 0;
+        this.matrlCompose.canvasSize = vec2(this.options.width, this.options.height);
+        this.matrlCompose.sizeRef = this.options.spawnSize[1];
+        this.matrlCompose.dropInvert = this.options.dropInvert;
 
         this.renderer.blit(null, FrameBuffer.CanvasBuffer, this.matrlCompose);
     }
@@ -539,6 +570,18 @@ export class RaindropRenderer
 
     private drawDroplet(time: Time)
     {
+        // 【自改】先让「细密水珠层」按 dropletFade 淡出：老水珠慢慢干，新水珠持续落下，
+        // 得到一块实时刷新的湿玻璃，而不是越积越厚、擦不掉的斑点。
+        // dropletFade = 1 时这段不执行，与上游行为完全一致。
+        if (this.options.dropletFade < 1)
+        {
+            const k = Math.pow(Math.max(this.options.dropletFade, 1e-4), time.dt);
+            this.matrlDropletFade.color.r = k;
+            this.matrlDropletFade.color.g = k;
+            this.matrlDropletFade.color.b = k;
+            this.matrlDropletFade.color.a = k;
+            this.renderer.blit(this.renderer.assets.textures.default, this.dropletTexture, this.matrlDropletFade);
+        }
         this.renderer.setFramebuffer(this.dropletTexture);
         const count = this.options.dropletsPerSeconds * time.dt;
         this.matrlDroplet.spawnRect = vec4(0, 0, this.options.width, this.options.height);

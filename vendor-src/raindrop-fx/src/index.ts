@@ -30,6 +30,8 @@ class RaindropFX
             background: "",
             dropImage: "",            // 【自改】水珠里显示的第二张图
             transparentBackground: false,   // 【自改】透明底（桌面浮层用）：只画水珠、不铺背景
+            dropletFade: 1,                 // 【自改】细密水珠层每秒保留比例，1 = 上游行为
+            dropInvert: 0,                  // 【自改】水珠倒影强度，0 = 上游行为
             gravity: 2400,
             slipRate: 0,
             motionInterval: [0.1, 0.4],

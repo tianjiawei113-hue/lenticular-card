@@ -8075,7 +8075,7 @@ void main()\r
   var compose_default;
   var init_compose = __esm({
     "vendor-src/raindrop-fx/src/shader/compose.glsl"() {
-      compose_default = "#version 300 es\r\nprecision mediump float;\r\n\r\nin vec4 vColor;\r\nin vec4 vPos;\r\nin vec2 vUV;\r\n\r\n  uniform sampler2D uMainTex;\n  uniform sampler2D uDropTex;      // \u3010\u81EA\u6539\u3011\u6C34\u73E0\u91CC\u8981\u663E\u793A\u7684\u56FE\uFF08\u7B2C\u4E8C\u5F20\u56FE\uFF09\n  uniform vec4 uBackgroundSize; // (x, y, 1/x, 1/y)\nuniform sampler2D uRaindropTex;\r\nuniform sampler2D uDropletTex;\r\nuniform sampler2D uMistTex;\r\nuniform vec4 uColor;\r\nuniform vec2 uSmoothRaindrop;\r\nuniform vec2 uRefractParams; // (refractBase, refractScale)\r\nuniform vec4 uLightPos;\r\nuniform vec4 uDiffuseColor; // (color.rgb, shadowOffset)\r\nuniform vec4 uSpecularParams; // (color.rgb, exponent)\r\nuniform float uBump;\nuniform float uPremultiply;   // \u3010\u81EA\u6539\u30111 = \u8F93\u51FA\u9884\u4E58 alpha\uFF08\u900F\u660E\u5E95/\u684C\u9762\u6D6E\u5C42\u7528\uFF09\n\r\nout vec4 fragColor;\r\n\r\nvoid main()\r\n{\r\n    // vec3 lightPos = vec3(0.5, 1, 1);\r\n\r\n    vec4 raindrop = texture(uRaindropTex, vUV.xy).rgba;\r\n    vec4 droplet = texture(uDropletTex, vUV.xy).rgba;\r\n    float mist = texture(uMistTex, vUV.xy).r;\r\n\r\n    vec4 compose = vec4(raindrop.rgb + droplet.rgb - vec3(2.0) * raindrop.rgb * droplet.rgb, max(droplet.a, raindrop.a));\r\n\r\n    float mask = smoothstep(uSmoothRaindrop.x, uSmoothRaindrop.y, compose.a);\r\n    \r\n    vec2 uv = vUV.xy + -(compose.xy - vec2(0.5)) * vec2(compose.b * uRefractParams.y + uRefractParams.x);\r\n    vec3 normal = normalize(vec3((compose.xy - vec2(0.5)) * vec2(2), 1.0));\r\n\r\n    // vec3 lightDir = lightPos - vec3(vUV, 0);\r\n    vec3 lightDir = uLightPos.xyz - uLightPos.w * vec3(vUV.xy, 0.0);\r\n    vec3 viewDir = vec3(0, 0, 1);\r\n    vec3 halfDir = normalize(lightDir + viewDir);\r\n    float lambertian = clamp(dot(normalize(lightDir), normal), 0.0, 1.0);\r\n    float blinnPhon = pow(max(dot(normal, halfDir), 0.0), uSpecularParams.a);\r\n\r\n\r\n    // offset = pow(offset, vec2(2));\r\n      vec4 color = texture(uMainTex, uv.xy).rgba;\n      // \u3010\u81EA\u6539\u3011\u53EA\u6709\u300C\u96E8\u73E0\u300D\u8986\u76D6\u5904\u6539\u91C7\u6837\u7B2C\u4E8C\u5F20\u56FE\uFF08\u7528\u540C\u4E00\u4E2A\u6298\u5C04 uv\uFF09\uFF1B\n      // \u5C0F\u7684\u80CC\u666F\u6C34\u73E0\u5C42\uFF08dropletsPerSeconds \u90A3\u5C42\uFF09\u4FDD\u6301\u539F\u6837\uFF0C\u5426\u5219\u6574\u5E45\u4F1A\u50CF\u94FA\u4E86\u4E00\u5C42\u522B\u4EBA\u5BB6\u7684\u96FE\n      vec4 dropColor = texture(uDropTex, uv.xy).rgba;\n      float dropMask = smoothstep(uSmoothRaindrop.x, uSmoothRaindrop.y, raindrop.a);\n      color.rgb = mix(color.rgb, dropColor.rgb, dropMask);\n      vec3 diffuse = vec3((lambertian - uDiffuseColor.a) * uDiffuseColor.rgb);\n\r\n    color.rgb += vec3((lambertian - uDiffuseColor.a) * uDiffuseColor.rgb);\r\n    color.rgb += vec3(blinnPhon) * uSpecularParams.rgb;\r\n    \r\n\r\n    // fragColor = vec4(mask, mask, mask, 1);\r\n    // color = color * vec3(uColor);\r\n\r\n    // \u3010\u81EA\u6539\u3011mix(1, mask, uPremultiply)\uFF1A\u6B63\u5E38\u6A21\u5F0F\u539F\u6837\u8F93\u51FA\uFF1B\u900F\u660E\u5E95\u6A21\u5F0F\u628A rgb \u4E58\u4E0A alpha\uFF08\u9884\u4E58\uFF09\n    fragColor = vec4(color.rgb * mix(1.0, mask, uPremultiply), mask);\n}\n";
+      compose_default = "#version 300 es\r\nprecision mediump float;\r\n\r\nin vec4 vColor;\r\nin vec4 vPos;\r\nin vec2 vUV;\r\n\r\n  uniform sampler2D uMainTex;\n  uniform sampler2D uDropTex;      // \u3010\u81EA\u6539\u3011\u6C34\u73E0\u91CC\u8981\u663E\u793A\u7684\u56FE\uFF08\u7B2C\u4E8C\u5F20\u56FE\uFF09\n  uniform vec4 uBackgroundSize; // (x, y, 1/x, 1/y)\nuniform sampler2D uRaindropTex;\r\nuniform sampler2D uDropletTex;\r\nuniform sampler2D uMistTex;\r\nuniform vec4 uColor;\r\nuniform vec2 uSmoothRaindrop;\r\nuniform vec2 uRefractParams; // (refractBase, refractScale)\r\nuniform vec4 uLightPos;\r\nuniform vec4 uDiffuseColor; // (color.rgb, shadowOffset)\r\nuniform vec4 uSpecularParams; // (color.rgb, exponent)\r\nuniform float uBump;\nuniform float uPremultiply;   // \u3010\u81EA\u6539\u30111 = \u8F93\u51FA\u9884\u4E58 alpha\uFF08\u900F\u660E\u5E95/\u684C\u9762\u6D6E\u5C42\u7528\uFF09\nuniform vec2  uCanvasSize;    // \u3010\u81EA\u6539\u3011\u753B\u5E03\u50CF\u7D20\u5C3A\u5BF8\uFF08\u7B97\u5012\u5F71\u8981\u7528\u7684\u73E0\u5FC3\u4F4D\u7F6E\uFF09\nuniform float uSizeRef;       // \u3010\u81EA\u6539\u3011\u73E0\u5B50\u5C3A\u5BF8\u7684\u5F52\u4E00\u5316\u57FA\u51C6\uFF08= spawnSize[1]\uFF09\nuniform float uDropInvert;    // \u3010\u81EA\u6539\u3011\u6C34\u73E0\u5012\u5F71\u5F3A\u5EA6\uFF1A0 = \u539F\u7248\u4E0D\u5012\u5F71\uFF0C1 = \u5B8C\u5168\u5012\u5F71\n\r\nout vec4 fragColor;\r\n\r\nvoid main()\r\n{\r\n    // vec3 lightPos = vec3(0.5, 1, 1);\r\n\r\n    vec4 raindrop = texture(uRaindropTex, vUV.xy).rgba;\r\n    vec4 droplet = texture(uDropletTex, vUV.xy).rgba;\r\n    float mist = texture(uMistTex, vUV.xy).r;\r\n\r\n    vec4 compose = vec4(raindrop.rgb + droplet.rgb - vec3(2.0) * raindrop.rgb * droplet.rgb, max(droplet.a, raindrop.a));\r\n\r\n    float mask = smoothstep(uSmoothRaindrop.x, uSmoothRaindrop.y, compose.a);\r\n    \r\n    vec2 uv = vUV.xy + -(compose.xy - vec2(0.5)) * vec2(compose.b * uRefractParams.y + uRefractParams.x);\r\n    vec3 normal = normalize(vec3((compose.xy - vec2(0.5)) * vec2(2), 1.0));\r\n\r\n    // vec3 lightDir = lightPos - vec3(vUV, 0);\r\n    vec3 lightDir = uLightPos.xyz - uLightPos.w * vec3(vUV.xy, 0.0);\r\n    vec3 viewDir = vec3(0, 0, 1);\r\n    vec3 halfDir = normalize(lightDir + viewDir);\r\n    float lambertian = clamp(dot(normalize(lightDir), normal), 0.0, 1.0);\r\n    float blinnPhon = pow(max(dot(normal, halfDir), 0.0), uSpecularParams.a);\r\n\r\n\r\n    // offset = pow(offset, vec2(2));\r\n      vec4 color = texture(uMainTex, uv.xy).rgba;\n      // \u3010\u81EA\u6539\u3011\u7403\u9762\u900F\u955C\u5012\u5F71\uFF1A\u6C34\u73E0\u76F8\u5F53\u4E8E\u4E00\u9897\u51F8\u900F\u955C\uFF0C\u900F\u8FC7\u53BB\u770B\u5230\u7684\u50CF\u662F\u5012\u7684\u3002\n      // compose.xy \u662F\u8FD9\u9897\u73E0\u5B50\u65B9\u6846\u5185\u7684\u5C40\u90E8 uv\uFF080..1\uFF09\uFF0Ccompose.b \u662F\u5F52\u4E00\u5316\u73E0\u5F84\uFF0C\n      // \u4E8E\u662F\u300C\u5F53\u524D\u50CF\u7D20\u76F8\u5BF9\u73E0\u5FC3\u7684 uv \u504F\u79FB\u300D= (compose.xy-0.5) * \u65B9\u6846uv\u5C3A\u5BF8\uFF1B\n      // \u73E0\u5FC3 = vUV - \u504F\u79FB\uFF1B\u5012\u5F71 = \u91C7\u6837\u70B9\u5173\u4E8E\u73E0\u5FC3\u505A 180\xB0 \u53CD\u8F6C\u3002\n      float qpx = clamp(compose.b, 0.0, 2.0) * uSizeRef;\n      vec2 quadUV = vec2(qpx / max(uCanvasSize.x, 1.0), qpx / max(uCanvasSize.y, 1.0));\n      vec2 toCenter = (compose.xy - vec2(0.5)) * quadUV;\n      vec2 uvInv = mix(uv, 2.0 * (vUV - toCenter) - uv, clamp(uDropInvert, 0.0, 1.0));\n      // \u3010\u81EA\u6539\u3011\u53EA\u6709\u300C\u96E8\u73E0\u300D\u8986\u76D6\u5904\u6539\u91C7\u6837\u7B2C\u4E8C\u5F20\u56FE\uFF08\u7528\u540C\u4E00\u4E2A\u6298\u5C04/\u5012\u5F71 uv\uFF09\uFF1B\n      // \u5C0F\u7684\u80CC\u666F\u6C34\u73E0\u5C42\uFF08dropletsPerSeconds \u90A3\u5C42\uFF09\u4FDD\u6301\u539F\u6837\uFF0C\u5426\u5219\u6574\u5E45\u4F1A\u50CF\u94FA\u4E86\u4E00\u5C42\u522B\u4EBA\u5BB6\u7684\u96FE\n      vec4 dropColor = texture(uDropTex, uvInv).rgba;\n      float dropMask = smoothstep(uSmoothRaindrop.x, uSmoothRaindrop.y, raindrop.a);\n      color.rgb = mix(color.rgb, dropColor.rgb, dropMask);\n      vec3 diffuse = vec3((lambertian - uDiffuseColor.a) * uDiffuseColor.rgb);\n\r\n    color.rgb += vec3((lambertian - uDiffuseColor.a) * uDiffuseColor.rgb);\r\n    color.rgb += vec3(blinnPhon) * uSpecularParams.rgb;\r\n    \r\n\r\n    // fragColor = vec4(mask, mask, mask, 1);\r\n    // color = color * vec3(uColor);\r\n\r\n    // \u3010\u81EA\u6539\u3011mix(1, mask, uPremultiply)\uFF1A\u6B63\u5E38\u6A21\u5F0F\u539F\u6837\u8F93\u51FA\uFF1B\u900F\u660E\u5E95\u6A21\u5F0F\u628A rgb \u4E58\u4E0A alpha\uFF08\u9884\u4E58\uFF09\n    fragColor = vec4(color.rgb * mix(1.0, mask, uPremultiply), mask);\n}\n";
     }
   });
 
@@ -8120,7 +8120,7 @@ void main()\r
   });
 
   // vendor-src/raindrop-fx/src/renderer.ts
-  var RaindropInstanceStruct, RaindropMaterial, DropletMaterial, FinalCompose, RaindropErase, MistAccumulate, MistBackgroundCompose, RaindropRenderer;
+  var RaindropInstanceStruct, RaindropMaterial, DropletMaterial, FinalCompose, RaindropErase, MistAccumulate, DropletFade, MistBackgroundCompose, RaindropRenderer;
   var init_renderer2 = __esm({
     "vendor-src/raindrop-fx/src/renderer.ts"() {
       init_dist();
@@ -8213,6 +8213,12 @@ void main()\r
           this.bump = 1;
           // 【自改】透明底时输出预乘 alpha，避免水珠边缘发亮
           this.premultiply = 0;
+          // 【自改】倒影用：画布像素尺寸
+          this.canvasSize = vec2(1, 1);
+          // 【自改】倒影用：珠径归一化基准 spawnSize[1]
+          this.sizeRef = 100;
+          // 【自改】水珠倒影强度 0~1
+          this.dropInvert = 0;
         }
       };
       __decorateClass([
@@ -8254,6 +8260,15 @@ void main()\r
       __decorateClass([
         shaderProp("uPremultiply", "float")
       ], FinalCompose.prototype, "premultiply", 2);
+      __decorateClass([
+        shaderProp("uCanvasSize", "vec2")
+      ], FinalCompose.prototype, "canvasSize", 2);
+      __decorateClass([
+        shaderProp("uSizeRef", "float")
+      ], FinalCompose.prototype, "sizeRef", 2);
+      __decorateClass([
+        shaderProp("uDropInvert", "float")
+      ], FinalCompose.prototype, "dropInvert", 2);
       RaindropErase = class extends SimpleTexturedMaterial(new Shader(d_vert_default, erase_default, {
         // blend: [Blending.Zero, Blending.OneMinusSrcAlpha],
         blendRGB: [Blending.Zero, Blending.OneMinusSrcAlpha],
@@ -8269,6 +8284,10 @@ void main()\r
       ], RaindropErase.prototype, "eraserSize", 2);
       MistAccumulate = SimpleTexturedMaterial(new Shader(d_vert_default, d_frag_default, {
         blend: [Blending.One, Blending.One]
+      }));
+      DropletFade = SimpleTexturedMaterial(new Shader(d_vert_default, d_frag_default, {
+        blendRGB: [Blending.Zero, Blending.SrcColor],
+        blendAlpha: [Blending.Zero, Blending.SrcColor]
       }));
       MistBackgroundCompose = class extends SimpleTexturedMaterial(new Shader(d_vert_default, bg_mist_default, {
         blend: [Blending.SrcAlpha, Blending.OneMinusSrcAlpha]
@@ -8296,6 +8315,7 @@ void main()\r
           this.matrlDroplet = new DropletMaterial();
           this.matrlErase = new RaindropErase();
           this.matrlMist = new MistAccumulate();
+          this.matrlDropletFade = new DropletFade();
           this.matrlMistCompose = new MistBackgroundCompose();
           this.raindropBuffer = new GLArrayBuffer(RaindropInstanceStruct, 3e3);
           this.renderer = new ZograRenderer(options.canvas);
@@ -8393,6 +8413,9 @@ void main()\r
           this.matrlCompose.specularParams = vec4(...this.options.raindropSpecularLight, this.options.raindropSpecularShininess);
           this.matrlCompose.bump = this.options.raindropLightBump;
           this.matrlCompose.premultiply = this.options.transparentBackground ? 1 : 0;
+          this.matrlCompose.canvasSize = vec2(this.options.width, this.options.height);
+          this.matrlCompose.sizeRef = this.options.spawnSize[1];
+          this.matrlCompose.dropInvert = this.options.dropInvert;
           this.renderer.blit(null, FrameBuffer.CanvasBuffer, this.matrlCompose);
         }
         blurBackground() {
@@ -8470,6 +8493,14 @@ void main()\r
             this.renderer.blit(this.raindropComposeTex, this.mistTexture, this.matrlErase);
         }
         drawDroplet(time) {
+          if (this.options.dropletFade < 1) {
+            const k = Math.pow(Math.max(this.options.dropletFade, 1e-4), time.dt);
+            this.matrlDropletFade.color.r = k;
+            this.matrlDropletFade.color.g = k;
+            this.matrlDropletFade.color.b = k;
+            this.matrlDropletFade.color.a = k;
+            this.renderer.blit(this.renderer.assets.textures.default, this.dropletTexture, this.matrlDropletFade);
+          }
           this.renderer.setFramebuffer(this.dropletTexture);
           const count = this.options.dropletsPerSeconds * time.dt;
           this.matrlDroplet.spawnRect = vec4(0, 0, this.options.width, this.options.height);
@@ -8796,6 +8827,10 @@ void main()\r
             // 【自改】水珠里显示的第二张图
             transparentBackground: false,
             // 【自改】透明底（桌面浮层用）：只画水珠、不铺背景
+            dropletFade: 1,
+            // 【自改】细密水珠层每秒保留比例，1 = 上游行为
+            dropInvert: 0,
+            // 【自改】水珠倒影强度，0 = 上游行为
             gravity: 2400,
             slipRate: 0,
             motionInterval: [0.1, 0.4],

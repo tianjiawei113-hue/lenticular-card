@@ -19,6 +19,9 @@ uniform vec4 uDiffuseColor; // (color.rgb, shadowOffset)
 uniform vec4 uSpecularParams; // (color.rgb, exponent)
 uniform float uBump;
 uniform float uPremultiply;   // 【自改】1 = 输出预乘 alpha（透明底/桌面浮层用）
+uniform vec2  uCanvasSize;    // 【自改】画布像素尺寸（算倒影要用的珠心位置）
+uniform float uSizeRef;       // 【自改】珠子尺寸的归一化基准（= spawnSize[1]）
+uniform float uDropInvert;    // 【自改】水珠倒影强度：0 = 原版不倒影，1 = 完全倒影
 
 out vec4 fragColor;
 
@@ -47,9 +50,17 @@ void main()
 
     // offset = pow(offset, vec2(2));
       vec4 color = texture(uMainTex, uv.xy).rgba;
-      // 【自改】只有「雨珠」覆盖处改采样第二张图（用同一个折射 uv）；
+      // 【自改】球面透镜倒影：水珠相当于一颗凸透镜，透过去看到的像是倒的。
+      // compose.xy 是这颗珠子方框内的局部 uv（0..1），compose.b 是归一化珠径，
+      // 于是「当前像素相对珠心的 uv 偏移」= (compose.xy-0.5) * 方框uv尺寸；
+      // 珠心 = vUV - 偏移；倒影 = 采样点关于珠心做 180° 反转。
+      float qpx = clamp(compose.b, 0.0, 2.0) * uSizeRef;
+      vec2 quadUV = vec2(qpx / max(uCanvasSize.x, 1.0), qpx / max(uCanvasSize.y, 1.0));
+      vec2 toCenter = (compose.xy - vec2(0.5)) * quadUV;
+      vec2 uvInv = mix(uv, 2.0 * (vUV - toCenter) - uv, clamp(uDropInvert, 0.0, 1.0));
+      // 【自改】只有「雨珠」覆盖处改采样第二张图（用同一个折射/倒影 uv）；
       // 小的背景水珠层（dropletsPerSeconds 那层）保持原样，否则整幅会像铺了一层别人家的雾
-      vec4 dropColor = texture(uDropTex, uv.xy).rgba;
+      vec4 dropColor = texture(uDropTex, uvInv).rgba;
       float dropMask = smoothstep(uSmoothRaindrop.x, uSmoothRaindrop.y, raindrop.a);
       color.rgb = mix(color.rgb, dropColor.rgb, dropMask);
       vec3 diffuse = vec3((lambertian - uDiffuseColor.a) * uDiffuseColor.rgb);
