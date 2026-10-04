@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v27 · 自查：装了 lint，修掉水波样式缺失的 FF/fsin/FW</em></h1>
+<h1>变 画 卡 工 坊 <em>v28 · 雨滴改用「自改源码」构建的引擎：底图清晰 + 水珠/雨痕显示第二张图</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -120,7 +120,7 @@
   <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="20"><b id="Fsov">20</b></label>
   <label>流动速度 <input id="Ffl" type="range" min="0" max="100" step="1" value="35"><b id="Fflv">35</b></label>
   <label>边缘发光 <input id="Fgl" type="range" min="0" max="70" step="1" value="24"><b id="Fglv">24</b></label>
-  <label>水痕清晰度 <input id="Rbl" type="range" min="1" max="5" step="1" value="3"><b id="Rblv">3</b></label>
+  <label>水珠折射 <input id="Rbl" type="range" min="1" max="5" step="1" value="2"><b id="Rblv">2</b></label>
 </div>
 
 <div class="panel">
@@ -148,7 +148,7 @@
 「透镜摆动」＝按真实光栅模拟：每根透镜里另一张从一侧推进；「细抖动」＝之前的细碎混色。<br>
 要拿去印真卡时，透镜宽度得和你买的光栅 LPI 对得上（例：60 LPI、成品宽 100 mm ≈ 236 根条纹，导出宽度 ÷ 236 就是每根透镜的像素数）。</div>
 
-<script src="vendor/raindrop-fx.bundle.js"></script>
+<script src="vendor/raindrop-fx.custom.js"></script>
 <script>
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 // 最早注册错误陷阱：后面任何脚本错误都显示在左下角红框里（方便你把内容发我）
@@ -625,14 +625,14 @@ async function rfxStart(W,H){
       rcv.width=Math.max(64,Math.round(W)); rcv.height=Math.max(2,Math.round(H));   // 建上下文前先把尺寸设好
       // 背景必须走「构造参数」：setBackground() 内部要用 renderer.assets，
       // 而 assets 是 start() 里的 loadAssets() 才加载的 —— 在 start() 之前调它必炸（这就是之前黑屏的原因）
-      const c0=sceneCanvas('A') || '';
+      const c0=sceneCanvas('A') || '', c1=sceneCanvas('B') || '';
       rfx=new RaindropFX({ canvas:rcv,
         background:c0,
+        dropImage:c1,                       // 【我们改的引擎】水珠/雨痕里显示第二张图
         spawnSize:[24,70], spawnInterval:[0.06,0.16], spawnLimit:800,
         slipRate:0.55, motionInterval:[0.4,1.6], xShifting:[-0.04,0.04],
-        // 关键：底图用最清晰的那档(1，0 档有 bug 会黑屏)，雾用 4 档 —— 拉开 3 级差(分辨率差 8 倍)，
-        // 水珠擦掉雾之后露出的就是明显清晰的画面
-        backgroundBlurSteps:1, mist:true, mistTime:1.2, mistBlurStep:4 });
+        backgroundBlurSteps:0,              // 0 档（我们自己修好了它 upSample(0) 的 bug）→ 底图完全清晰
+        mist:false });
       rfxScene = c0 ? ('A|'+imgVer+'|'+W+'x'+H) : '';
     }
     if(!rfxRunning){ await rfx.start(); rfxRunning=true; }
@@ -644,13 +644,16 @@ function rfxTick(a,W,H){
   if(!rfxRunning){ rfxStart(W,H); return; }
   if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} }
   if(rfxPending || (!imgA && !imgB)) return;
-  // 有第二张图时，倾斜过半就换背后的图（水珠折射自动跟随）；只有一张就一直用它
-  const want=(imgB && a>=0.5) ? 'B' : 'A';
-  const key=want+'|'+imgVer+'|'+W+'x'+H;
+  // 底图固定是「正面图」A（清晰）；水珠/雨痕里显示的是「斜图」B —— 由引擎的 dropImage 负责
+  const key='A|'+imgVer+'|'+W+'x'+H;
   if(rfxScene===key) return;
-  const c=sceneCanvas(want); if(!c) return;
+  const c=sceneCanvas('A'); if(!c) return;
+  const c2=sceneCanvas('B') || c;                 // 换图后水珠里那张也要跟着换
   rfxPending=true;
-  rfx.setBackground(c).then(function(){ rfxScene=key; }, function(){ errShow('背景设置失败'); }).then(function(){ rfxPending=false; });
+  rfx.setBackground(c)
+     .then(function(){ return (rfx.setDropImage ? rfx.setDropImage(c2) : null); })
+     .then(function(){ rfxScene=key; }, function(){ errShow('背景/水珠图 设置失败'); })
+     .then(function(){ rfxPending=false; });
 }
 function draw(){
   const rain=(MODE==='flow' && FSTYLE==='rain' && typeof RaindropFX!=='undefined');
@@ -731,11 +734,10 @@ document.getElementById('Fsty').onchange=function(){ FSTYLE=this.value; draw(); 
 document.getElementById('Fso').oninput=function(){ FSO=Number(this.value); document.getElementById('Fsov').textContent=this.value; draw(); };
 document.getElementById('Ffl').oninput=function(){ FFL=Number(this.value); document.getElementById('Fflv').textContent=this.value; draw(); };
 document.getElementById('Fgl').oninput=function(){ FGL=Number(this.value); document.getElementById('Fglv').textContent=this.value; draw(); };
-document.getElementById('Rbl').oninput=function(){          // 湿玻璃清晰度：0 = 底图完全清晰
+document.getElementById('Rbl').oninput=function(){          // 水珠折射强度（法线偏移量）：越大，珠子里的画面被"拉"得越开
   const v=Number(this.value);
   document.getElementById('Rblv').textContent=v;
-  // 底图固定用最清晰档(1)，靠「雾有多糊」拉开差距：差得越多，擦痕越清楚
-  if(rfx){ try{ rfx.options.backgroundBlurSteps=1; rfx.options.mistBlurStep=1+v; }catch{} rfxScene=''; if(MODE==='flow'&&FSTYLE==='rain') rfxTick(ratioB(),dispW,dispH); }
+  if(rfx){ try{ rfx.options.refractBase=0.10*v; rfx.options.refractScale=0.15*v; }catch{} }
 };
 
 // 导出：按当前输出精度出底图，图案与预览完全一致（可印真卡）
