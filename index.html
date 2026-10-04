@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v28 · 雨滴改用「自改源码」构建的引擎：底图清晰 + 水珠/雨痕显示第二张图</em></h1>
+<h1>变 画 卡 工 坊 <em>v29 · 珠子尺寸按画布宽度换算 + 第二张图只给雨珠</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -629,10 +629,12 @@ async function rfxStart(W,H){
       rfx=new RaindropFX({ canvas:rcv,
         background:c0,
         dropImage:c1,                       // 【我们改的引擎】水珠/雨痕里显示第二张图
-        spawnSize:[24,70], spawnInterval:[0.06,0.16], spawnLimit:800,
+        // 尺寸按画布宽度换算：它 demo 是「60~100px ÷ 约1500px 宽」= 4%~6.7%，我们照抄这个比例
+        spawnSize:[Math.max(6,W*0.040), Math.max(11,W*0.067)], spawnInterval:[0.10,0.22], spawnLimit:800,
         slipRate:0.55, motionInterval:[0.4,1.6], xShifting:[-0.04,0.04],
         backgroundBlurSteps:0,              // 0 档（我们自己修好了它 upSample(0) 的 bug）→ 底图完全清晰
         mist:false });
+      rfxScale(W);
       rfxScene = c0 ? ('A|'+imgVer+'|'+W+'x'+H) : '';
     }
     if(!rfxRunning){ await rfx.start(); rfxRunning=true; }
@@ -640,9 +642,17 @@ async function rfxStart(W,H){
   }catch(e){ errShow('雨滴引擎启动失败：'+((e&&e.message)||e)+'  ['+glInfo()+']'); }
 }
 function rfxStop(){ if(rfx && rfxRunning){ try{ rfx.stop(); }catch{} rfxRunning=false; } }
+// 珠子/小水珠的尺寸都按画布宽度换算（它 demo 的比例），否则小画布上会显得过大
+function rfxScale(W){
+  if(!rfx) return;
+  try{
+    rfx.options.spawnSize=[Math.max(6,W*0.040), Math.max(11,W*0.067)];
+    rfx.options.dropletSize=[Math.max(2,W*0.006), Math.max(4,W*0.018)];
+  }catch{}
+}
 function rfxTick(a,W,H){
   if(!rfxRunning){ rfxStart(W,H); return; }
-  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} }
+  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} rfxScale(W); }
   if(rfxPending || (!imgA && !imgB)) return;
   // 底图固定是「正面图」A（清晰）；水珠/雨痕里显示的是「斜图」B —— 由引擎的 dropImage 负责
   const key='A|'+imgVer+'|'+W+'x'+H;

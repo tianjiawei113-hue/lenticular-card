@@ -46,9 +46,11 @@ void main()
 
     // offset = pow(offset, vec2(2));
       vec4 color = texture(uMainTex, uv.xy).rgba;
-      // 【自改】水珠覆盖处（mask）改采样第二张图，用同一个折射 uv
+      // 【自改】只有「雨珠」覆盖处改采样第二张图（用同一个折射 uv）；
+      // 小的背景水珠层（dropletsPerSeconds 那层）保持原样，否则整幅会像铺了一层别人家的雾
       vec4 dropColor = texture(uDropTex, uv.xy).rgba;
-      color.rgb = mix(color.rgb, dropColor.rgb, mask);
+      float dropMask = smoothstep(uSmoothRaindrop.x, uSmoothRaindrop.y, raindrop.a);
+      color.rgb = mix(color.rgb, dropColor.rgb, dropMask);
       vec3 diffuse = vec3((lambertian - uDiffuseColor.a) * uDiffuseColor.rgb);
 
     color.rgb += vec3((lambertian - uDiffuseColor.a) * uDiffuseColor.rgb);
