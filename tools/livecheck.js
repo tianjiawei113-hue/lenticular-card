@@ -10,4 +10,7 @@ const fs = require("fs");
   console.log("has rfxTick:", t.includes("rfxTick"));
   console.log("script srcs:", (t.match(/<script[^>]*src="[^"]+"/g) || []).join(" | "));
   console.log("version markers:", (t.match(/v\d+/g) || []).join(","));
+  console.log("有 Bgs 滑杆:", t.includes('id="Bgs"'), "| 有 Mst 滑杆:", t.includes('id="Mst"'),
+    "| mistBlurStep 联动:", t.includes("mistBlurStep:RFX_BG+1"),
+    "| RFX_MIST:", t.includes("RFX_MIST"));
 })();

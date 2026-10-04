@@ -107,6 +107,9 @@ class FinalCompose extends MaterialFromShader(new Shader(defaultVert, composeFra
 
     @shaderProp("uBump", "float")
     bump: number = 1;
+
+    @shaderProp("uPremultiply", "float")       // 【自改】透明底时输出预乘 alpha，避免水珠边缘发亮
+    premultiply: number = 0;
 }
 
 class RaindropErase extends SimpleTexturedMaterial(new Shader(defaultVert, raindropErase, {
@@ -143,6 +146,12 @@ export interface RenderOptions
     background: TextureData | string;
     /** 【自改】水珠里要显示的那张图（不设 = 用背景图原本的折射行为） */
     dropImage: TextureData | string;
+    /**
+     * 【自改】透明底：画布清成完全透明、并且不把背景铺到画面上，只留水珠/雨痕。
+     * 给「桌面透明浮层」用 —— 背景图只当折射源（水珠里透出的是桌面），画面本身不遮挡桌面。
+     * 默认 false，主网页行为完全不变。
+     */
+    transparentBackground: boolean;
     /**
      * Background blur steps used for background & raindrop refract image.
      * Value should be integer from 0 to log2(backgroundSize).
@@ -395,9 +404,14 @@ export class RaindropRenderer
         this.drawRaindrops(raindrops);
 
         this.renderer.setFramebuffer(FrameBuffer.CanvasBuffer);
-        this.renderer.clear(Color.black);
+        // 【自改】透明底模式下清成透明、且不铺背景：只把水珠/雨痕画出来，其余像素保持全透明
+        if (this.options.transparentBackground)
+            this.renderer.clear(Color.black.transparent());
+        else
+            this.renderer.clear(Color.black);
 
-        this.drawBackground();
+        if (!this.options.transparentBackground)
+            this.drawBackground();
 
         this.matrlCompose.background = this.blurryBackground;
         this.matrlCompose.backgroundSize = vec4(this.options.width, this.options.height, 1 / this.options.width, 1 / this.options.height);
@@ -411,6 +425,9 @@ export class RaindropRenderer
         this.matrlCompose.diffuseLight = new Color(...this.options.raindropDiffuseLight, this.options.raindropShadowOffset);
         this.matrlCompose.specularParams = vec4(...this.options.raindropSpecularLight, this.options.raindropSpecularShininess);
         this.matrlCompose.bump = this.options.raindropLightBump;
+        // 【自改】透明底时输出「预乘 alpha」（WebGL 画布默认 premultipliedAlpha=true，
+        // 不预乘的话水珠边缘的 rgb 会偏亮、出现一圈光晕）
+        this.matrlCompose.premultiply = this.options.transparentBackground ? 1 : 0;
 
         this.renderer.blit(null, FrameBuffer.CanvasBuffer, this.matrlCompose);
     }

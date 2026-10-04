@@ -29,6 +29,7 @@ class RaindropFX
             height: canvas.height,
             background: "",
             dropImage: "",            // 【自改】水珠里显示的第二张图
+            transparentBackground: false,   // 【自改】透明底（桌面浮层用）：只画水珠、不铺背景
             gravity: 2400,
             slipRate: 0,
             motionInterval: [0.1, 0.4],

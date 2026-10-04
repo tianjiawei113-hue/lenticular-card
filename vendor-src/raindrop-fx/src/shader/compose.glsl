@@ -18,6 +18,7 @@ uniform vec4 uLightPos;
 uniform vec4 uDiffuseColor; // (color.rgb, shadowOffset)
 uniform vec4 uSpecularParams; // (color.rgb, exponent)
 uniform float uBump;
+uniform float uPremultiply;   // 【自改】1 = 输出预乘 alpha（透明底/桌面浮层用）
 
 out vec4 fragColor;
 
@@ -60,5 +61,6 @@ void main()
     // fragColor = vec4(mask, mask, mask, 1);
     // color = color * vec3(uColor);
 
-    fragColor = vec4(color.rgb, mask);// vec4(color.rgb, mask);
+    // 【自改】mix(1, mask, uPremultiply)：正常模式原样输出；透明底模式把 rgb 乘上 alpha（预乘）
+    fragColor = vec4(color.rgb * mix(1.0, mask, uPremultiply), mask);
 }
