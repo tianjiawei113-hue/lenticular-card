@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v29 · 珠子尺寸按画布宽度换算 + 第二张图只给雨珠</em></h1>
+<h1>变 画 卡 工 坊 <em>v30 · 物理参数全部回到它的默认值（只按画布宽度等比换算）</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -120,7 +120,7 @@
   <label>边缘柔度 <input id="Fso" type="range" min="2" max="45" step="1" value="20"><b id="Fsov">20</b></label>
   <label>流动速度 <input id="Ffl" type="range" min="0" max="100" step="1" value="35"><b id="Fflv">35</b></label>
   <label>边缘发光 <input id="Fgl" type="range" min="0" max="70" step="1" value="24"><b id="Fglv">24</b></label>
-  <label>水珠折射 <input id="Rbl" type="range" min="1" max="5" step="1" value="2"><b id="Rblv">2</b></label>
+  <label>水珠折射 <input id="Rbl" type="range" min="1" max="6" step="1" value="4"><b id="Rblv">4</b></label>
 </div>
 
 <div class="panel">
@@ -629,12 +629,10 @@ async function rfxStart(W,H){
       rfx=new RaindropFX({ canvas:rcv,
         background:c0,
         dropImage:c1,                       // 【我们改的引擎】水珠/雨痕里显示第二张图
-        // 尺寸按画布宽度换算：它 demo 是「60~100px ÷ 约1500px 宽」= 4%~6.7%，我们照抄这个比例
-        spawnSize:[Math.max(6,W*0.040), Math.max(11,W*0.067)], spawnInterval:[0.10,0.22], spawnLimit:800,
-        slipRate:0.55, motionInterval:[0.4,1.6], xShifting:[-0.04,0.04],
+        // 其余全部用它的默认值 —— 它 demo 就是一个参数都不传的，改任何物理参数都会"手感和它不一样"
         backgroundBlurSteps:0,              // 0 档（我们自己修好了它 upSample(0) 的 bug）→ 底图完全清晰
         mist:false });
-      rfxScale(W);
+      rfxApplyDefaults(W);
       rfxScene = c0 ? ('A|'+imgVer+'|'+W+'x'+H) : '';
     }
     if(!rfxRunning){ await rfx.start(); rfxRunning=true; }
@@ -642,17 +640,22 @@ async function rfxStart(W,H){
   }catch(e){ errShow('雨滴引擎启动失败：'+((e&&e.message)||e)+'  ['+glInfo()+']'); }
 }
 function rfxStop(){ if(rfx && rfxRunning){ try{ rfx.stop(); }catch{} rfxRunning=false; } }
-// 珠子/小水珠的尺寸都按画布宽度换算（它 demo 的比例），否则小画布上会显得过大
-function rfxScale(W){
+// 照它 demo 的默认值跑，只把「以像素为单位」的那几个参数按画布宽度等比换算：
+// k = 画布宽 / 1500（它 demo 画布大约 1500 宽）。这样重力、蒸发、拖尾间距的手感才一致。
+function rfxApplyDefaults(W){
   if(!rfx) return;
+  const k=W/1500;
   try{
-    rfx.options.spawnSize=[Math.max(6,W*0.040), Math.max(11,W*0.067)];
-    rfx.options.dropletSize=[Math.max(2,W*0.006), Math.max(4,W*0.018)];
+    rfx.options.spawnSize=[60*k, 100*k];         // 默认 [60,100] 像素
+    rfx.options.dropletSize=[10*k, 30*k];        // 默认 [10,30]
+    rfx.options.trailDistance=[20*k, 30*k];      // 默认 [20,30]（沿路生小水珠的间距）
+    rfx.options.gravity=2400*k;                  // 默认 2400 px/s²
+    rfx.options.evaporate=10*k*k;                // 默认 10（按质量，质量∝尺寸²）
   }catch{}
 }
 function rfxTick(a,W,H){
   if(!rfxRunning){ rfxStart(W,H); return; }
-  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} rfxScale(W); }
+  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} rfxApplyDefaults(W); }
   if(rfxPending || (!imgA && !imgB)) return;
   // 底图固定是「正面图」A（清晰）；水珠/雨痕里显示的是「斜图」B —— 由引擎的 dropImage 负责
   const key='A|'+imgVer+'|'+W+'x'+H;
