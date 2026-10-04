@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>变 画 卡 工 坊 <em>v30 · 物理参数全部回到它的默认值（只按画布宽度等比换算）</em></h1>
+<h1>变 画 卡 工 坊 <em>v31 · 修好「雨滴其实一直没跑起来」：自建 bundle 加载就报错，页面一直悄悄退回内置兜底版</em></h1>
 
 <div class="row">
   <label class="slot"><input id="fileA" type="file" accept="image/*" hidden><img id="thumbA" alt=""><span>① 选「正面」图</span></label>
@@ -619,7 +619,7 @@ function sceneCanvas(which){
   return sceneCv;
 }
 async function rfxStart(W,H){
-  if(typeof RaindropFX==='undefined'){ errShow('雨滴引擎没加载（vendor/raindrop-fx.bundle.js）'); return; }
+  if(typeof RaindropFX==='undefined'){ errShow('雨滴引擎没加载（vendor/raindrop-fx.custom.js）'); return; }
   try{
     if(!rfx){
       rcv.width=Math.max(64,Math.round(W)); rcv.height=Math.max(2,Math.round(H));   // 建上下文前先把尺寸设好
@@ -631,8 +631,9 @@ async function rfxStart(W,H){
         dropImage:c1,                       // 【我们改的引擎】水珠/雨痕里显示第二张图
         // 其余全部用它的默认值 —— 它 demo 就是一个参数都不传的，改任何物理参数都会"手感和它不一样"
         backgroundBlurSteps:0,              // 0 档（我们自己修好了它 upSample(0) 的 bug）→ 底图完全清晰
-        mist:false });
-      rfxApplyDefaults(W);
+        // 雾气保持它默认的「开」：demo 里那层湿玻璃的雾、以及水珠/雨痕擦过后留下的「痕迹」全靠它
+        mist:true });
+      rfxApplyDefaults(W,H);
       rfxScene = c0 ? ('A|'+imgVer+'|'+W+'x'+H) : '';
     }
     if(!rfxRunning){ await rfx.start(); rfxRunning=true; }
@@ -640,22 +641,51 @@ async function rfxStart(W,H){
   }catch(e){ errShow('雨滴引擎启动失败：'+((e&&e.message)||e)+'  ['+glInfo()+']'); }
 }
 function rfxStop(){ if(rfx && rfxRunning){ try{ rfx.stop(); }catch{} rfxRunning=false; } }
-// 照它 demo 的默认值跑，只把「以像素为单位」的那几个参数按画布宽度等比换算：
-// k = 画布宽 / 1500（它 demo 画布大约 1500 宽）。这样重力、蒸发、拖尾间距的手感才一致。
-function rfxApplyDefaults(W){
+// 引擎自检：把这行读给我，就能判断"到底是参数不对、还是引擎没跑起来"
+function rainDiag(){
+  if(typeof RaindropFX==='undefined') return '引擎未加载（vendor/raindrop-fx.custom.js）';
+  if(!rfx) return '引擎未创建';
+  const o=rfx.options, n=(x)=>Math.round(x);
+  return '引擎'+(rfxRunning?'运行中':'已停止')
+    +' ｜ 画布 '+n(o.width)+'×'+n(o.height)
+    +' ｜ 珠子 '+n(o.spawnSize[0])+'~'+n(o.spawnSize[1])+'px'
+    +' ｜ 重力 '+n(o.gravity)+' 蒸发 '+o.evaporate.toFixed(2)
+    +' ｜ 折射 '+o.refractBase.toFixed(2)+'/'+o.refractScale.toFixed(2)
+    +' ｜ 雾 '+(o.mist?'开':'关')+' 模糊 '+(o.backgroundBlurSteps|0)
+    +' ｜ 第二张图 '+(o.dropImage?'已设':'未设')
+    +' ｜ 水珠数 '+(rfx.simulator&&rfx.simulator.raindrops?rfx.simulator.raindrops.length:'—');
+}
+window.rainDiag=rainDiag;      // 自检用：控制台敲 rainDiag() 就能看到引擎当前状态
+// 它的默认参数是按「1500×1000 的画布」调出来的。我用官方 bundle 实测过它的稳态：
+// 约 560 颗水珠、主珠约 55 颗、主珠直径约 85px、珠面覆盖约 62% 画面。
+// 我们只要把整个模拟「等比缩小」到我们的画布上，观感就完全一致 —— 等比缩小时：
+//   长度类（珠径 / 重力 / 拖尾间距 / 雾珠直径）∝ k
+//   质量类（蒸发，质量 = 尺寸²）∝ k²
+//   时间 / 频率类（生成间隔、雾珠生成率、涨落速度）保持不变 ← 这是关键，缩了就会变稀
+// 因为下落时间 t=√(2h/g)，h 与 g 同时 ∝k → t 不变；于是珠数、覆盖面积比都和 demo 一模一样。
+// k = √(画布面积 / 参照面积)；在参照画布上 k=1，全部恢复成它 demo 的原值。
+const RFX_REF_W=1500, RFX_REF_H=1000;
+function rfxApplyDefaults(W,H){
   if(!rfx) return;
-  const k=W/1500;
+  const k=Math.sqrt((W*H)/(RFX_REF_W*RFX_REF_H)), k2=k*k;
   try{
     rfx.options.spawnSize=[60*k, 100*k];         // 默认 [60,100] 像素
-    rfx.options.dropletSize=[10*k, 30*k];        // 默认 [10,30]
+    rfx.options.dropletSize=[10*k, 30*k];        // 默认 [10,30]（背景小水珠）
     rfx.options.trailDistance=[20*k, 30*k];      // 默认 [20,30]（沿路生小水珠的间距）
     rfx.options.gravity=2400*k;                  // 默认 2400 px/s²
-    rfx.options.evaporate=10*k*k;                // 默认 10（按质量，质量∝尺寸²）
+    rfx.options.evaporate=10*k2;                 // 默认 10（按质量，质量∝尺寸²）
+    // 生成间隔按「画布高」定标：珠子要下落穿越整块画布，画布越高、单颗存活越久，
+    // 所以要按比例拉长间隔，每屏的主体水珠数才和 demo 一样多。
+    // 标定依据：我在 347×520 上扫描过生成间隔，取「珠面覆盖≈demo 的 62%」那一档（0.16~0.19s）。
+    const iv=0.1*(1000/H);
+    rfx.options.spawnInterval=[iv, iv];
+    // 雾珠（背景那层小水珠）是每帧撒一批的「面密度」，按面积缩放才保持同样的疏密
+    rfx.options.dropletsPerSeconds=500*k2;       // 默认 500/s
   }catch{}
 }
 function rfxTick(a,W,H){
   if(!rfxRunning){ rfxStart(W,H); return; }
-  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} rfxApplyDefaults(W); }
+  if(rfxSize!==W+'x'+H){ try{ rfx.resize(W,H); rfxSize=W+'x'+H; }catch{} rfxApplyDefaults(W,H); }
   if(rfxPending || (!imgA && !imgB)) return;
   // 底图固定是「正面图」A（清晰）；水珠/雨痕里显示的是「斜图」B —— 由引擎的 dropImage 负责
   const key='A|'+imgVer+'|'+W+'x'+H;

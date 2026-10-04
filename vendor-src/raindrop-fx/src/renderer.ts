@@ -488,7 +488,10 @@ export class RaindropRenderer
             const raindrop = raindrops[i];
             const model = mat4.rts(quat.identity(), raindrop.pos.toVec3(), raindrop.size.toVec3(1));
             this.raindropBuffer[i].modelMatrix.set(model);
-            this.raindropBuffer[i].size[0] = raindrop.size.x / 100;
+            // 【自改】上游写死 100（正好等于它默认的 spawnSize[1]）。这个值是「珠径归一化」用的，
+            // 下游 compose.glsl 拿它乘 refractScale 决定折射强度；画布缩小后如果还除 100，
+            // 折射会按珠径的比例一起变弱 → 珠子看着发平、不发亮。改成引用 spawnSize[1]，默认值下与上游完全一致。
+            this.raindropBuffer[i].size[0] = raindrop.size.x / this.options.spawnSize[1];
         }
         this.raindropBuffer.markDirty();
         switch (this.options.raindropCompose)

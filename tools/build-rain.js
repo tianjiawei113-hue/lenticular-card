@@ -8,7 +8,10 @@ const out = process.argv.includes("--min") ? path.join(ROOT, "vendor", "raindrop
 require("esbuild").build({
   entryPoints: [path.join(ROOT, "vendor-src/raindrop-fx/src/index.ts")],
   absWorkingDir: ROOT,          // 关键：别让它往上层目录找 tsconfig/node_modules（会撞沙箱）
-  tsconfigRaw: { compilerOptions: { target: "es2020", useDefineForClassFields: false } },
+  // experimentalDecorators 必须开：zogra-renderer 的 @shaderProp 返回的是 TS 传统装饰器
+  // （(target, key) 签名），若按 TC39 标准装饰器编译，类字段会收到 void 0 → Reflect.metadata 抛裸 TypeError，
+  // 整个 bundle 加载失败 → 页面悄悄退回内置 2D 兜底版（珠子大、没物理）。
+  tsconfigRaw: { compilerOptions: { target: "es2020", useDefineForClassFields: false, experimentalDecorators: true } },
   bundle: true,
   format: "iife",
   globalName: "RaindropFX",

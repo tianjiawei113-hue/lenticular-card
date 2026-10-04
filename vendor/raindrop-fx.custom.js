@@ -1,14 +1,7 @@
 var RaindropFX = (() => {
-  var __create = Object.create;
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
-  var __knownSymbol = (name, symbol) => (symbol = Symbol[name]) ? symbol : /* @__PURE__ */ Symbol.for("Symbol." + name);
-  var __typeError = (msg) => {
-    throw TypeError(msg);
-  };
-  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-  var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
   var __esm = (fn, res, err) => function __init() {
     if (err) throw err[0];
     try {
@@ -28,44 +21,14 @@ var RaindropFX = (() => {
     for (var name in all)
       __defProp(target, name, { get: all[name], enumerable: true });
   };
-  var __decoratorStart = (base) => [, , , __create(base?.[__knownSymbol("metadata")] ?? null)];
-  var __decoratorStrings = ["class", "method", "getter", "setter", "accessor", "field", "value", "get", "set"];
-  var __expectFn = (fn) => fn !== void 0 && typeof fn !== "function" ? __typeError("Function expected") : fn;
-  var __decoratorContext = (kind, name, done, metadata, fns) => ({ kind: __decoratorStrings[kind], name, metadata, addInitializer: (fn) => done._ ? __typeError("Already initialized") : fns.push(__expectFn(fn || null)) });
-  var __decoratorMetadata = (array, target) => __defNormalProp(target, __knownSymbol("metadata"), array[3]);
-  var __runInitializers = (array, flags, self2, value) => {
-    for (var i2 = 0, fns = array[flags >> 1], n2 = fns && fns.length; i2 < n2; i2++) flags & 1 ? fns[i2].call(self2) : value = fns[i2].call(self2, value);
-    return value;
+  var __decorateClass = (decorators, target, key, kind) => {
+    var result = kind > 1 ? void 0 : kind ? __getOwnPropDesc(target, key) : target;
+    for (var i2 = decorators.length - 1, decorator; i2 >= 0; i2--)
+      if (decorator = decorators[i2])
+        result = (kind ? decorator(target, key, result) : decorator(result)) || result;
+    if (kind && result) __defProp(target, key, result);
+    return result;
   };
-  var __decorateElement = (array, flags, name, decorators, target, extra) => {
-    var fn, it, done, ctx2, access, k = flags & 7, s = !!(flags & 8), p = !!(flags & 16);
-    var j = k > 3 ? array.length + 1 : k ? s ? 1 : 2 : 0, key = __decoratorStrings[k + 5];
-    var initializers = k > 3 && (array[j - 1] = []), extraInitializers = array[j] || (array[j] = []);
-    var desc = k && (!p && !s && (target = target.prototype), k < 5 && (k > 3 || !p) && __getOwnPropDesc(k < 4 ? target : { get [name]() {
-      return __privateGet(this, extra);
-    }, set [name](x) {
-      return __privateSet(this, extra, x);
-    } }, name));
-    k ? p && k < 4 && __name(extra, (k > 2 ? "set " : k > 1 ? "get " : "") + name) : __name(target, name);
-    for (var i2 = decorators.length - 1; i2 >= 0; i2--) {
-      ctx2 = __decoratorContext(k, name, done = {}, array[3], extraInitializers);
-      if (k) {
-        ctx2.static = s, ctx2.private = p, access = ctx2.access = { has: p ? (x) => __privateIn(target, x) : (x) => name in x };
-        if (k ^ 3) access.get = p ? (x) => (k ^ 1 ? __privateGet : __privateMethod)(x, target, k ^ 4 ? extra : desc.get) : (x) => x[name];
-        if (k > 2) access.set = p ? (x, y) => __privateSet(x, target, y, k ^ 4 ? extra : desc.set) : (x, y) => x[name] = y;
-      }
-      it = (0, decorators[i2])(k ? k < 4 ? p ? extra : desc[key] : k > 4 ? void 0 : { get: desc.get, set: desc.set } : target, ctx2), done._ = 1;
-      if (k ^ 4 || it === void 0) __expectFn(it) && (k > 4 ? initializers.unshift(it) : k ? p ? extra = it : desc[key] = it : target = it);
-      else if (typeof it !== "object" || it === null) __typeError("Object expected");
-      else __expectFn(fn = it.get) && (desc.get = fn), __expectFn(fn = it.set) && (desc.set = fn), __expectFn(fn = it.init) && initializers.unshift(fn);
-    }
-    return k || __decoratorMetadata(array, target), desc && __defProp(target, name, desc), p ? k ^ 4 ? extra : desc : target;
-  };
-  var __accessCheck = (obj, member, msg) => member.has(obj) || __typeError("Cannot " + msg);
-  var __privateIn = (member, obj) => Object(obj) !== obj ? __typeError('Cannot use the "in" operator on this value') : member.has(obj);
-  var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read from private field"), getter ? getter.call(obj) : member.get(obj));
-  var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
-  var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
   var __toBinary = Uint8Array.fromBase64 || /* @__PURE__ */ (() => {
     var table = new Uint8Array(128);
     for (var i2 = 0; i2 < 64; i2++) table[i2 < 26 ? i2 + 65 : i2 < 52 ? i2 + 71 : i2 < 62 ? i2 - 4 : i2 * 4 - 205] = i2;
@@ -4438,8 +4401,8 @@ var RaindropFX = (() => {
                 keys.push(key);
               }
             }
-            for (var _a7 = 0, parentKeys_1 = parentKeys; _a7 < parentKeys_1.length; _a7++) {
-              var key = parentKeys_1[_a7];
+            for (var _a = 0, parentKeys_1 = parentKeys; _a < parentKeys_1.length; _a++) {
+              var key = parentKeys_1[_a];
               var hasKey = set6.has(key);
               if (!hasKey) {
                 set6.add(key);
@@ -5050,8 +5013,8 @@ var RaindropFX = (() => {
       setGlobalContext = (_ctx) => ctx = _ctx;
       GlobalContext = () => ctx;
       GL = () => {
-        var _a7;
-        return (_a7 = GlobalContext()) === null || _a7 === void 0 ? void 0 : _a7.gl;
+        var _a;
+        return (_a = GlobalContext()) === null || _a === void 0 ? void 0 : _a.gl;
       };
     }
   });
@@ -5230,23 +5193,23 @@ void main()\r
         // on(event: string, listener: EventListener): void
         // on<T extends EventKeys<TEvents>>(event: T, listener: TEvents[T]): void
         on(event, listener) {
-          var _a7;
+          var _a;
           if (!this.listeners.has(event))
             this.listeners.set(event, []);
-          (_a7 = this.listeners.get(event)) === null || _a7 === void 0 ? void 0 : _a7.push(listener);
+          (_a = this.listeners.get(event)) === null || _a === void 0 ? void 0 : _a.push(listener);
         }
         // off(event: string, listener: EventListener): void
         // off<T extends EventKeys<TEvents>>(event: T, listener: TEvents[T]): void
         off(event, listener) {
-          var _a7, _b;
+          var _a, _b;
           if (this.listeners.has(event))
-            this.listeners.set(event, (_b = (_a7 = this.listeners.get(event)) === null || _a7 === void 0 ? void 0 : _a7.filter((f) => f !== listener)) !== null && _b !== void 0 ? _b : []);
+            this.listeners.set(event, (_b = (_a = this.listeners.get(event)) === null || _a === void 0 ? void 0 : _a.filter((f) => f !== listener)) !== null && _b !== void 0 ? _b : []);
         }
         // emit(event: string, ...args: any[]): void
         // emit<T extends EventKeys<TEvents>>(event: T, ...args: Parameters<TEvents[T]>): void
         emit(event, ...args) {
-          var _a7;
-          (_a7 = this.listeners.get(event)) === null || _a7 === void 0 ? void 0 : _a7.forEach((f) => f(...args));
+          var _a;
+          (_a = this.listeners.get(event)) === null || _a === void 0 ? void 0 : _a.forEach((f) => f(...args));
         }
         with() {
           return this;
@@ -5579,7 +5542,7 @@ void main()\r
           this.initialized = false;
         }
         tryInit(required = false) {
-          var _a7;
+          var _a;
           if (this.destroyed)
             throw new Error("Attempt to use destroyed array buffer.");
           if (this.initialized)
@@ -5592,7 +5555,7 @@ void main()\r
           }
           this.ctx = ctx2;
           const gl = ctx2.gl;
-          this.glBuf = (_a7 = gl.createBuffer()) !== null && _a7 !== void 0 ? _a7 : panic("Failed to create render buffer");
+          this.glBuf = (_a = gl.createBuffer()) !== null && _a !== void 0 ? _a : panic("Failed to create render buffer");
           gl.bindBuffer(gl.ARRAY_BUFFER, this.glBuf);
           gl.bufferData(gl.ARRAY_BUFFER, this.byteLength, this.static ? gl.STATIC_DRAW : gl.DYNAMIC_DRAW);
           gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -5785,7 +5748,7 @@ void main()\r
           this.initialized = false;
         }
         tryInit(required = false) {
-          var _a7, _b;
+          var _a, _b;
           if (this.initialized)
             return true;
           if (this.destroyed)
@@ -5797,7 +5760,7 @@ void main()\r
             return false;
           }
           const gl = this.ctx.gl;
-          this.elementBuffer = (_a7 = gl.createBuffer()) !== null && _a7 !== void 0 ? _a7 : panic("Failed to create element buffer object.");
+          this.elementBuffer = (_a = gl.createBuffer()) !== null && _a !== void 0 ? _a : panic("Failed to create element buffer object.");
           this.vertexArray = (_b = gl.createVertexArray()) !== null && _b !== void 0 ? _b : panic("Failed to create vertex array object.");
           gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.elementBuffer);
           gl.bindVertexArray(this.vertexArray);
@@ -6259,9 +6222,9 @@ void main()\r
           this.dirty = true;
         }
         init() {
-          var _a7;
+          var _a;
           const gl = this.ctx.gl;
-          this.frameBuffer = (_a7 = gl.createFramebuffer()) !== null && _a7 !== void 0 ? _a7 : panic("Failed to create frame buffer object");
+          this.frameBuffer = (_a = gl.createFramebuffer()) !== null && _a !== void 0 ? _a : panic("Failed to create frame buffer object");
           return true;
         }
         bind() {
@@ -6295,10 +6258,10 @@ void main()\r
 
   // node_modules/zogra-renderer/dist/core/texture.js
   function flipTexture(ctx2, dst, src, width, height, texFormat, filterMode, wrapMode, mipmapLevel) {
-    var _a7, _b;
+    var _a, _b;
     const gl = ctx2.gl;
     const renderer = ctx2.renderer;
-    const srcTex = (_a7 = gl.createTexture()) !== null && _a7 !== void 0 ? _a7 : panic("Failed to create texture.");
+    const srcTex = (_a = gl.createTexture()) !== null && _a !== void 0 ? _a : panic("Failed to create texture.");
     const [internalFormat, format, type] = mapGLFormat(gl, texFormat);
     gl.bindTexture(gl.TEXTURE_2D, srcTex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -6466,7 +6429,7 @@ void main()\r
           flipTexture(this.ctx, this._glTex, pixels, this.width, this.height, this.format, this.filterMode, this.wrapMode, 0);
         }
         tryInit(required = false) {
-          var _a7;
+          var _a;
           if (this.initialized)
             return true;
           const ctx2 = this.ctx || GlobalContext();
@@ -6476,7 +6439,7 @@ void main()\r
             return false;
           }
           const gl = ctx2.gl;
-          this._glTex = (_a7 = gl.createTexture()) !== null && _a7 !== void 0 ? _a7 : panic("Failed to create texture.");
+          this._glTex = (_a = gl.createTexture()) !== null && _a !== void 0 ? _a : panic("Failed to create texture.");
           this.initialized = true;
           return true;
         }
@@ -6535,10 +6498,10 @@ void main()\r
           super.setData(pixels);
         }
         destroy() {
-          var _a7;
+          var _a;
           if (!this.initialized || this.destroyed)
             return;
-          (_a7 = this.depthTexture) === null || _a7 === void 0 ? void 0 : _a7.destroy();
+          (_a = this.depthTexture) === null || _a === void 0 ? void 0 : _a.destroy();
           super.destroy();
         }
         bindFramebuffer(attachment) {
@@ -6807,7 +6770,7 @@ void main()\r
           }
         }
         uploadUniform(prop, value) {
-          var _a7;
+          var _a;
           const gl = this.gl;
           const ctx2 = GlobalContext();
           if (!prop.location)
@@ -6884,7 +6847,7 @@ void main()\r
               for (let i2 = 0; i2 < texArray.length; i2++) {
                 const tex = texArray[i2] || ctx2.renderer.assets.textures.default;
                 let unit = this.bindNextTexture(tex);
-                if (((_a7 = texProp.uploaded) === null || _a7 === void 0 ? void 0 : _a7[i2]) !== unit)
+                if (((_a = texProp.uploaded) === null || _a === void 0 ? void 0 : _a[i2]) !== unit)
                   shouldUpload = true;
                 uniformValues[i2] = unit;
               }
@@ -7028,11 +6991,11 @@ void main()\r
 
   // node_modules/zogra-renderer/dist/builtin-assets/textures.js
   function createDefaultTextures(context) {
-    var _a7;
+    var _a;
     const size = 64;
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = size;
-    const ctx2 = (_a7 = canvas.getContext("2d")) !== null && _a7 !== void 0 ? _a7 : panic("Failed to create default texture.");
+    const ctx2 = (_a = canvas.getContext("2d")) !== null && _a !== void 0 ? _a : panic("Failed to create default texture.");
     ctx2.fillStyle = "black";
     ctx2.fillRect(0, 0, size, size);
     ctx2.fillStyle = "cyan";
@@ -7803,9 +7766,9 @@ void main()\r
           gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.multiSampling, WebGL2RenderingContext.DEPTH_COMPONENT32F, this.size.x, this.size.y);
         }
         init() {
-          var _a7;
+          var _a;
           const gl = this.ctx.gl;
-          this._glBuf = (_a7 = gl.createRenderbuffer()) !== null && _a7 !== void 0 ? _a7 : panic("Failed to create render buffer.");
+          this._glBuf = (_a = gl.createRenderbuffer()) !== null && _a !== void 0 ? _a : panic("Failed to create render buffer.");
           gl.bindRenderbuffer(gl.RENDERBUFFER, this._glBuf);
           gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.multiSampling, WebGL2RenderingContext.DEPTH_COMPONENT32F, this.size.x, this.size.y);
           gl.bindRenderbuffer(gl.RENDERBUFFER, null);
@@ -7989,25 +7952,29 @@ void main()\r
   });
 
   // vendor-src/raindrop-fx/src/blur.ts
-  var _sampleOffset_dec, _textureSize_dec, _texture_dec, _a, _init, MaterialBlur, BlurRenderer;
+  var MaterialBlur, BlurRenderer;
   var init_blur2 = __esm({
     "vendor-src/raindrop-fx/src/blur.ts"() {
       init_dist();
       init_d_vert();
       init_blur();
-      MaterialBlur = class extends (_a = MaterialFromShader(new Shader(d_vert_default, blur_default)), _texture_dec = [shaderProp("uMainTex", "tex2d")], _textureSize_dec = [shaderProp("uTexSize", "vec4")], _sampleOffset_dec = [shaderProp("uSampleOffset", "float")], _a) {
+      MaterialBlur = class extends MaterialFromShader(new Shader(d_vert_default, blur_default)) {
         constructor() {
           super(...arguments);
-          this.texture = __runInitializers(_init, 8, this, null), __runInitializers(_init, 11, this);
-          this.textureSize = __runInitializers(_init, 12, this, vec4.one()), __runInitializers(_init, 15, this);
-          this.sampleOffset = __runInitializers(_init, 16, this, 1), __runInitializers(_init, 19, this);
+          this.texture = null;
+          this.textureSize = vec4.one();
+          this.sampleOffset = 1;
         }
       };
-      _init = __decoratorStart(_a);
-      __decorateElement(_init, 5, "texture", _texture_dec, MaterialBlur);
-      __decorateElement(_init, 5, "textureSize", _textureSize_dec, MaterialBlur);
-      __decorateElement(_init, 5, "sampleOffset", _sampleOffset_dec, MaterialBlur);
-      __decoratorMetadata(_init, MaterialBlur);
+      __decorateClass([
+        shaderProp("uMainTex", "tex2d")
+      ], MaterialBlur.prototype, "texture", 2);
+      __decorateClass([
+        shaderProp("uTexSize", "vec4")
+      ], MaterialBlur.prototype, "textureSize", 2);
+      __decorateClass([
+        shaderProp("uSampleOffset", "float")
+      ], MaterialBlur.prototype, "sampleOffset", 2);
       BlurRenderer = class {
         constructor(renderer) {
           this.steps = [];
@@ -8153,7 +8120,7 @@ void main()\r
   });
 
   // vendor-src/raindrop-fx/src/renderer.ts
-  var RaindropInstanceStruct, _size_dec, _texture_dec2, _a2, _init2, RaindropMaterial, _seed_dec, _sizeRange_dec, _spawnRect_dec, _texture_dec3, _a3, _init3, DropletMaterial, _bump_dec, _specularParams_dec, _diffuseLight_dec, _lightPos_dec, _refractParams_dec, _smoothRaindrop_dec, _dropTexture_dec, _mistTex_dec, _dropletTex_dec, _raindropTex_dec, _backgroundSize_dec, _background_dec, _a4, _init4, FinalCompose, _eraserSize_dec, _a5, _init5, RaindropErase, MistAccumulate, _mistTex_dec2, _mistColor_dec, _a6, _init6, MistBackgroundCompose, RaindropRenderer;
+  var RaindropInstanceStruct, RaindropMaterial, DropletMaterial, FinalCompose, RaindropErase, MistAccumulate, MistBackgroundCompose, RaindropRenderer;
   var init_renderer2 = __esm({
     "vendor-src/raindrop-fx/src/renderer.ts"() {
       init_dist();
@@ -8173,7 +8140,7 @@ void main()\r
         size: "float",
         modelMatrix: "mat4"
       });
-      RaindropMaterial = class extends (_a2 = MaterialFromShader(new Shader(raindrop_vert_default, raindrop_frag_default, {
+      RaindropMaterial = class extends MaterialFromShader(new Shader(raindrop_vert_default, raindrop_frag_default, {
         blendRGB: [Blending.OneMinusDstColor, Blending.OneMinusSrcColor],
         depth: DepthTest.Disable,
         zWrite: false,
@@ -8181,18 +8148,20 @@ void main()\r
           size: "aSize",
           modelMatrix: "aModelMatrix"
         }
-      })), _texture_dec2 = [shaderProp("uMainTex", "tex2d")], _size_dec = [shaderProp("uSize", "float")], _a2) {
+      })) {
         constructor() {
           super(...arguments);
-          this.texture = __runInitializers(_init2, 8, this, null), __runInitializers(_init2, 11, this);
-          this.size = __runInitializers(_init2, 12, this, 0), __runInitializers(_init2, 15, this);
+          this.texture = null;
+          this.size = 0;
         }
       };
-      _init2 = __decoratorStart(_a2);
-      __decorateElement(_init2, 5, "texture", _texture_dec2, RaindropMaterial);
-      __decorateElement(_init2, 5, "size", _size_dec, RaindropMaterial);
-      __decoratorMetadata(_init2, RaindropMaterial);
-      DropletMaterial = class extends (_a3 = MaterialFromShader(new Shader(droplet_vert_default, droplet_default, {
+      __decorateClass([
+        shaderProp("uMainTex", "tex2d")
+      ], RaindropMaterial.prototype, "texture", 2);
+      __decorateClass([
+        shaderProp("uSize", "float")
+      ], RaindropMaterial.prototype, "size", 2);
+      DropletMaterial = class extends MaterialFromShader(new Shader(droplet_vert_default, droplet_default, {
         vertexStructure: DefaultVertexData,
         blendRGB: [Blending.OneMinusDstColor, Blending.OneMinusSrcColor],
         depth: DepthTest.Disable,
@@ -8201,86 +8170,116 @@ void main()\r
           size: "aSize",
           modelMatrix: "aModelMatrix"
         }
-      })), _texture_dec3 = [shaderProp("uMainTex", "tex2d")], _spawnRect_dec = [shaderProp("uSpawnRect", "vec4")], _sizeRange_dec = [shaderProp("uSizeRange", "vec2")], _seed_dec = [shaderProp("uSeed", "float")], _a3) {
+      })) {
         constructor() {
           super(...arguments);
-          this.texture = __runInitializers(_init3, 8, this, null), __runInitializers(_init3, 11, this);
-          this.spawnRect = __runInitializers(_init3, 12, this, vec4(0, 0, 1, 1)), __runInitializers(_init3, 15, this);
-          this.sizeRange = __runInitializers(_init3, 16, this, vec2(10, 20)), __runInitializers(_init3, 19, this);
-          this.seed = __runInitializers(_init3, 20, this, 1), __runInitializers(_init3, 23, this);
+          this.texture = null;
+          this.spawnRect = vec4(0, 0, 1, 1);
+          this.sizeRange = vec2(10, 20);
+          this.seed = 1;
         }
       };
-      _init3 = __decoratorStart(_a3);
-      __decorateElement(_init3, 5, "texture", _texture_dec3, DropletMaterial);
-      __decorateElement(_init3, 5, "spawnRect", _spawnRect_dec, DropletMaterial);
-      __decorateElement(_init3, 5, "sizeRange", _sizeRange_dec, DropletMaterial);
-      __decorateElement(_init3, 5, "seed", _seed_dec, DropletMaterial);
-      __decoratorMetadata(_init3, DropletMaterial);
-      FinalCompose = class extends (_a4 = MaterialFromShader(new Shader(d_vert_default, compose_default, {
+      __decorateClass([
+        shaderProp("uMainTex", "tex2d")
+      ], DropletMaterial.prototype, "texture", 2);
+      __decorateClass([
+        shaderProp("uSpawnRect", "vec4")
+      ], DropletMaterial.prototype, "spawnRect", 2);
+      __decorateClass([
+        shaderProp("uSizeRange", "vec2")
+      ], DropletMaterial.prototype, "sizeRange", 2);
+      __decorateClass([
+        shaderProp("uSeed", "float")
+      ], DropletMaterial.prototype, "seed", 2);
+      FinalCompose = class extends MaterialFromShader(new Shader(d_vert_default, compose_default, {
         blend: [Blending.SrcAlpha, Blending.OneMinusSrcAlpha],
         depth: DepthTest.Disable,
         zWrite: false
-      })), _background_dec = [shaderProp("uMainTex", "tex2d")], _backgroundSize_dec = [shaderProp("uBackgroundSize", "vec4")], _raindropTex_dec = [shaderProp("uRaindropTex", "tex2d")], _dropletTex_dec = [shaderProp("uDropletTex", "tex2d")], _mistTex_dec = [shaderProp("uMistTex", "tex2d")], _dropTexture_dec = [shaderProp("uDropTex", "tex2d")], _smoothRaindrop_dec = [shaderProp("uSmoothRaindrop", "vec2")], _refractParams_dec = [shaderProp("uRefractParams", "vec2")], _lightPos_dec = [shaderProp("uLightPos", "vec4")], _diffuseLight_dec = [shaderProp("uDiffuseColor", "color")], _specularParams_dec = [shaderProp("uSpecularParams", "vec4")], _bump_dec = [shaderProp("uBump", "float")], _a4) {
+      })) {
         constructor() {
           super(...arguments);
-          this.background = __runInitializers(_init4, 8, this, null), __runInitializers(_init4, 11, this);
-          this.backgroundSize = __runInitializers(_init4, 12, this, vec4.one()), __runInitializers(_init4, 15, this);
-          this.raindropTex = __runInitializers(_init4, 16, this, null), __runInitializers(_init4, 19, this);
-          this.dropletTex = __runInitializers(_init4, 20, this, null), __runInitializers(_init4, 23, this);
-          this.mistTex = __runInitializers(_init4, 24, this, null), __runInitializers(_init4, 27, this);
+          this.background = null;
+          this.backgroundSize = vec4.one();
+          this.raindropTex = null;
+          this.dropletTex = null;
+          this.mistTex = null;
           // 【自改】水珠里显示的图
-          this.dropTexture = __runInitializers(_init4, 28, this, null), __runInitializers(_init4, 31, this);
-          this.smoothRaindrop = __runInitializers(_init4, 32, this, vec2(0.95, 1)), __runInitializers(_init4, 35, this);
-          this.refractParams = __runInitializers(_init4, 36, this, vec2(0.4, 0.6)), __runInitializers(_init4, 39, this);
-          this.lightPos = __runInitializers(_init4, 40, this, vec4(0.5, 0.5, 2, 1)), __runInitializers(_init4, 43, this);
-          this.diffuseLight = __runInitializers(_init4, 44, this, new Color(0.3, 0.3, 0.3, 0.8)), __runInitializers(_init4, 47, this);
-          this.specularParams = __runInitializers(_init4, 48, this, vec4(1, 1, 1, 32)), __runInitializers(_init4, 51, this);
-          this.bump = __runInitializers(_init4, 52, this, 1), __runInitializers(_init4, 55, this);
+          this.dropTexture = null;
+          this.smoothRaindrop = vec2(0.95, 1);
+          this.refractParams = vec2(0.4, 0.6);
+          this.lightPos = vec4(0.5, 0.5, 2, 1);
+          this.diffuseLight = new Color(0.3, 0.3, 0.3, 0.8);
+          this.specularParams = vec4(1, 1, 1, 32);
+          this.bump = 1;
         }
       };
-      _init4 = __decoratorStart(_a4);
-      __decorateElement(_init4, 5, "background", _background_dec, FinalCompose);
-      __decorateElement(_init4, 5, "backgroundSize", _backgroundSize_dec, FinalCompose);
-      __decorateElement(_init4, 5, "raindropTex", _raindropTex_dec, FinalCompose);
-      __decorateElement(_init4, 5, "dropletTex", _dropletTex_dec, FinalCompose);
-      __decorateElement(_init4, 5, "mistTex", _mistTex_dec, FinalCompose);
-      __decorateElement(_init4, 5, "dropTexture", _dropTexture_dec, FinalCompose);
-      __decorateElement(_init4, 5, "smoothRaindrop", _smoothRaindrop_dec, FinalCompose);
-      __decorateElement(_init4, 5, "refractParams", _refractParams_dec, FinalCompose);
-      __decorateElement(_init4, 5, "lightPos", _lightPos_dec, FinalCompose);
-      __decorateElement(_init4, 5, "diffuseLight", _diffuseLight_dec, FinalCompose);
-      __decorateElement(_init4, 5, "specularParams", _specularParams_dec, FinalCompose);
-      __decorateElement(_init4, 5, "bump", _bump_dec, FinalCompose);
-      __decoratorMetadata(_init4, FinalCompose);
-      RaindropErase = class extends (_a5 = SimpleTexturedMaterial(new Shader(d_vert_default, erase_default, {
+      __decorateClass([
+        shaderProp("uMainTex", "tex2d")
+      ], FinalCompose.prototype, "background", 2);
+      __decorateClass([
+        shaderProp("uBackgroundSize", "vec4")
+      ], FinalCompose.prototype, "backgroundSize", 2);
+      __decorateClass([
+        shaderProp("uRaindropTex", "tex2d")
+      ], FinalCompose.prototype, "raindropTex", 2);
+      __decorateClass([
+        shaderProp("uDropletTex", "tex2d")
+      ], FinalCompose.prototype, "dropletTex", 2);
+      __decorateClass([
+        shaderProp("uMistTex", "tex2d")
+      ], FinalCompose.prototype, "mistTex", 2);
+      __decorateClass([
+        shaderProp("uDropTex", "tex2d")
+      ], FinalCompose.prototype, "dropTexture", 2);
+      __decorateClass([
+        shaderProp("uSmoothRaindrop", "vec2")
+      ], FinalCompose.prototype, "smoothRaindrop", 2);
+      __decorateClass([
+        shaderProp("uRefractParams", "vec2")
+      ], FinalCompose.prototype, "refractParams", 2);
+      __decorateClass([
+        shaderProp("uLightPos", "vec4")
+      ], FinalCompose.prototype, "lightPos", 2);
+      __decorateClass([
+        shaderProp("uDiffuseColor", "color")
+      ], FinalCompose.prototype, "diffuseLight", 2);
+      __decorateClass([
+        shaderProp("uSpecularParams", "vec4")
+      ], FinalCompose.prototype, "specularParams", 2);
+      __decorateClass([
+        shaderProp("uBump", "float")
+      ], FinalCompose.prototype, "bump", 2);
+      RaindropErase = class extends SimpleTexturedMaterial(new Shader(d_vert_default, erase_default, {
         // blend: [Blending.Zero, Blending.OneMinusSrcAlpha],
         blendRGB: [Blending.Zero, Blending.OneMinusSrcAlpha],
         blendAlpha: [Blending.Zero, Blending.OneMinusSrcAlpha]
-      })), _eraserSize_dec = [shaderProp("uEraserSmooth", "vec2")], _a5) {
+      })) {
         constructor() {
           super(...arguments);
-          this.eraserSize = __runInitializers(_init5, 8, this, vec2(0.93, 1)), __runInitializers(_init5, 11, this);
+          this.eraserSize = vec2(0.93, 1);
         }
       };
-      _init5 = __decoratorStart(_a5);
-      __decorateElement(_init5, 5, "eraserSize", _eraserSize_dec, RaindropErase);
-      __decoratorMetadata(_init5, RaindropErase);
+      __decorateClass([
+        shaderProp("uEraserSmooth", "vec2")
+      ], RaindropErase.prototype, "eraserSize", 2);
       MistAccumulate = SimpleTexturedMaterial(new Shader(d_vert_default, d_frag_default, {
         blend: [Blending.One, Blending.One]
       }));
-      MistBackgroundCompose = class extends (_a6 = SimpleTexturedMaterial(new Shader(d_vert_default, bg_mist_default, {
+      MistBackgroundCompose = class extends SimpleTexturedMaterial(new Shader(d_vert_default, bg_mist_default, {
         blend: [Blending.SrcAlpha, Blending.OneMinusSrcAlpha]
-      })), _mistColor_dec = [shaderProp("uMistColor", "color")], _mistTex_dec2 = [shaderProp("uMistTex", "tex2d")], _a6) {
+      })) {
         constructor() {
           super(...arguments);
-          this.mistColor = __runInitializers(_init6, 8, this, new Color(0.01, 0.01, 0.01, 1)), __runInitializers(_init6, 11, this);
-          this.mistTex = __runInitializers(_init6, 12, this, null), __runInitializers(_init6, 15, this);
+          this.mistColor = new Color(0.01, 0.01, 0.01, 1);
+          this.mistTex = null;
         }
       };
-      _init6 = __decoratorStart(_a6);
-      __decorateElement(_init6, 5, "mistColor", _mistColor_dec, MistBackgroundCompose);
-      __decorateElement(_init6, 5, "mistTex", _mistTex_dec2, MistBackgroundCompose);
-      __decoratorMetadata(_init6, MistBackgroundCompose);
+      __decorateClass([
+        shaderProp("uMistColor", "color")
+      ], MistBackgroundCompose.prototype, "mistColor", 2);
+      __decorateClass([
+        shaderProp("uMistTex", "tex2d")
+      ], MistBackgroundCompose.prototype, "mistTex", 2);
       RaindropRenderer = class {
         // deubg: DebugLayerRenderer = new DebugLayerRenderer();
         constructor(options) {
@@ -8433,7 +8432,7 @@ void main()\r
             const raindrop = raindrops[i2];
             const model = mat4.rts(quat.identity(), raindrop.pos.toVec3(), raindrop.size.toVec3(1));
             this.raindropBuffer[i2].modelMatrix.set(model);
-            this.raindropBuffer[i2].size[0] = raindrop.size.x / 100;
+            this.raindropBuffer[i2].size[0] = raindrop.size.x / this.options.spawnSize[1];
           }
           this.raindropBuffer.markDirty();
           switch (this.options.raindropCompose) {
@@ -8547,7 +8546,8 @@ void main()\r
           }
         }
         split() {
-          if (this.mass < 1e3)
+          const splitThreshold = (this.simulator.options.spawnSize[0] / 60) ** 2 * 1e3;
+          if (this.mass < splitThreshold)
             return;
           let size = this.size.x * randomRange(...this.simulator.options.trailDropSize);
           const pos = plus(vec2(randomRange(-5, 5), this.size.y / 4), this.pos);

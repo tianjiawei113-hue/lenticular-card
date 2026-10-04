@@ -94,7 +94,11 @@ export class RainDrop
     split()
     {
         // return;
-        if (this.mass < 1000)
+        // 【自改】上游把分裂阈值写死成 mass < 1000（mass = size²，对应它默认 spawnSize[0]=60：60²/3.6）。
+        // 我们把尺寸按画布宽度等比缩小后，质量按平方缩小，写死 1000 会让缩小的珠子永不分裂
+        // → 没有拖尾、没有沿途小水珠、整屏只剩个位数水珠。改成随 spawnSize 等比缩放，分裂时机与官方 demo 一致。
+        const splitThreshold = (this.simulator.options.spawnSize[0] / 60) ** 2 * 1000;
+        if (this.mass < splitThreshold)
             return;
         let size = this.size.x * randomRange(...this.simulator.options.trailDropSize);
         const pos = plus(vec2(randomRange(-5, 5), this.size.y / 4), this.pos);
